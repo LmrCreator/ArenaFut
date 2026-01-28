@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Torneios - Arena Fut</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+
+    <div class="app-container">
+        <nav class="sidebar">
+            <div class="logo">
+                <i class="fas fa-futbol"></i> Arena<span>Fut</span>
+            </div>
+            <ul>
+                <li onclick="showTab('dashboard')" class="active"><i class="fas fa-home"></i> Início</li>
+                <li onclick="showTab('teams')"><i class="fas fa-users"></i> Equipes & Jogadores</li>
+                <li onclick="showTab('matches')"><i class="fas fa-calendar-alt"></i> Jogos & Súmula</li>
+                <li onclick="showTab('standings')"><i class="fas fa-list-ol"></i> Classificação</li>
+                <li onclick="showTab('stats')"><i class="fas fa-chart-bar"></i> Estatísticas</li>
+                <li onclick="showTab('news')"><i class="fas fa-newspaper"></i> Mural & Regras</li>
+            </ul>
+            <div class="admin-toggle">
+                <label>Modo Admin</label>
+                <input type="checkbox" id="adminMode" checked onchange="toggleAdmin()">
+            </div>
+        </nav>
+
+        <main class="content">
+            
+            <section id="dashboard" class="tab-content active">
+                <h2>Configuração do Campeonato</h2>
+                <div class="card">
+                    <form id="setupForm">
+                        <div class="form-group">
+                            <label>Nome do Torneio</label>
+                            <input type="text" id="tourneyName" placeholder="Ex: Copa do Bairro 2026">
+                        </div>
+                        <div class="form-group">
+                            <label>Modalidade</label>
+                            <select id="tourneyType">
+                                <option value="futebol">Futebol de Campo</option>
+                                <option value="futsal">Futsal</option>
+                                <option value="society">Fut7 / Society</option>
+                                <option value="areia">Futebol de Areia</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Formato</label>
+                            <select id="tourneyFormat">
+                                <option value="league">Pontos Corridos (Todos contra Todos)</option>
+                                </select>
+                        </div>
+                        <button type="button" class="btn-primary" onclick="initTournament()">Criar/Salvar Torneio</button>
+                        <button type="button" class="btn-danger" onclick="resetData()">Apagar Tudo</button>
+                    </form>
+                </div>
+            </section>
+
+            <section id="teams" class="tab-content">
+                <div class="header-flex">
+                    <h2>Gestão de Equipes</h2>
+                    <button class="btn-primary admin-only" onclick="openModal('teamModal')">+ Nova Equipe</button>
+                </div>
+                <div id="teamsList" class="grid-container">
+                    </div>
+            </section>
+
+            <section id="matches" class="tab-content">
+                <div class="header-flex">
+                    <h2>Tabela de Jogos</h2>
+                    <button class="btn-secondary admin-only" onclick="generateFixture()">Gerar Tabela Automática</button>
+                </div>
+                <div id="matchesList" class="matches-list">
+                    </div>
+            </section>
+
+            <section id="standings" class="tab-content">
+                <h2>Tabela de Classificação</h2>
+                <div class="table-responsive">
+                    <table class="standings-table">
+                        <thead>
+                            <tr>
+                                <th>Pos</th>
+                                <th>Time</th>
+                                <th>P</th>
+                                <th>J</th>
+                                <th>V</th>
+                                <th>E</th>
+                                <th>D</th>
+                                <th>GP</th>
+                                <th>GC</th>
+                                <th>SG</th>
+                                <th>%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="standingsBody">
+                            </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="stats" class="tab-content">
+                <h2>Estatísticas & Disciplina</h2>
+                <div class="stats-grid">
+                    <div class="card">
+                        <h3><i class="fas fa-futbol"></i> Artilharia</h3>
+                        <ul id="topScorers" class="list-stats"></ul>
+                    </div>
+                    <div class="card">
+                        <h3><i class="fas fa-square" style="color:red"></i> Cartões Vermelhos</h3>
+                        <ul id="redCards" class="list-stats"></ul>
+                    </div>
+                    <div class="card">
+                        <h3><i class="fas fa-square" style="color:yellow"></i> Cartões Amarelos</h3>
+                        <ul id="yellowCards" class="list-stats"></ul>
+                    </div>
+                </div>
+            </section>
+
+            <section id="news" class="tab-content">
+                <h2>Mural & Regulamento</h2>
+                <div class="card">
+                    <h3>Regulamento Oficial</h3>
+                    <textarea id="rulesText" class="rules-area" placeholder="Digite as regras aqui..."></textarea>
+                    <button class="btn-primary admin-only" onclick="saveRules()">Salvar Regras</button>
+                </div>
+                <div class="feed" id="newsFeed">
+                    <h3>Últimas Atualizações</h3>
+                    </div>
+            </section>
+
+        </main>
+    </div>
+
+    <div id="teamModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('teamModal')">&times;</span>
+            <h3>Adicionar Equipe</h3>
+            <input type="text" id="newTeamName" placeholder="Nome da Equipe">
+            <button class="btn-primary" onclick="addTeam()">Salvar</button>
+        </div>
+    </div>
+
+    <div id="matchModal" class="modal">
+        <div class="modal-content large">
+            <span class="close" onclick="closeModal('matchModal')">&times;</span>
+            <h3>Súmula da Partida</h3>
+            <h4 id="matchTitle" style="text-align:center; margin-bottom: 20px;">Time A vs Time B</h4>
+            
+            <div class="score-input">
+                <input type="number" id="scoreA" placeholder="0">
+                <span>X</span>
+                <input type="number" id="scoreB" placeholder="0">
+            </div>
+
+            <div class="match-events">
+                <h5>Eventos (Gols/Cartões)</h5>
+                <div class="form-group">
+                    <select id="eventTeam" onchange="loadPlayersForEvent()">
+                        <option value="">Selecione o Time</option>
+                    </select>
+                    <select id="eventPlayer">
+                        <option value="">Selecione o Jogador</option>
+                    </select>
+                    <select id="eventType">
+                        <option value="goal">Gol</option>
+                        <option value="yellow">Cartão Amarelo</option>
+                        <option value="red">Cartão Vermelho</option>
+                    </select>
+                    <button class="btn-small" onclick="addEvent()">Adicionar</button>
+                </div>
+                <ul id="eventsList" class="events-list-ui"></ul>
+            </div>
+
+            <div class="actions">
+                <button class="btn-primary" onclick="saveMatchResult()">Encerrar Jogo & Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
