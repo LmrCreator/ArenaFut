@@ -3,180 +3,169 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestor de Torneios - Arena Fut</title>
+    <title>ArenaFut - Organizador de Torneios Grátis</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
 
-    <div class="app-container">
-        <nav class="sidebar">
-            <div class="logo">
-                <i class="fas fa-futbol"></i> Arena<span>Fut</span>
+    <div id="landing-page" class="landing-container">
+        <header class="landing-header">
+            <div class="logo"><i class="fas fa-futbol"></i> Arena<span>Fut</span></div>
+            <nav>
+                <button class="btn-outline" onclick="showLogin('login')">Entrar</button>
+                <button class="btn-primary" onclick="showLogin('register')">Criar Conta Grátis</button>
+            </nav>
+        </header>
+
+        <section class="hero">
+            <div class="hero-text">
+                <h1>Organize seus campeonatos de forma profissional e gratuita.</h1>
+                <p>A melhor alternativa ao Copa Fácil. Sem mensalidades, sem login complexo. Crie tabelas, gerencie artilharia e compartilhe resultados.</p>
+                <button class="btn-cta" onclick="showLogin('register')">Começar Agora <i class="fas fa-arrow-right"></i></button>
             </div>
-            <ul>
-                <li onclick="showTab('dashboard')" class="active"><i class="fas fa-home"></i> Início</li>
-                <li onclick="showTab('teams')"><i class="fas fa-users"></i> Equipes & Jogadores</li>
-                <li onclick="showTab('matches')"><i class="fas fa-calendar-alt"></i> Jogos & Súmula</li>
-                <li onclick="showTab('standings')"><i class="fas fa-list-ol"></i> Classificação</li>
-                <li onclick="showTab('stats')"><i class="fas fa-chart-bar"></i> Estatísticas</li>
-                <li onclick="showTab('news')"><i class="fas fa-newspaper"></i> Mural & Regras</li>
+            <div class="hero-image">
+                <i class="fas fa-trophy" style="font-size: 200px; color: rgba(255,255,255,0.2);"></i>
+            </div>
+        </section>
+
+        <div id="auth-box" class="auth-box hidden">
+            <span class="close-auth" onclick="hideAuth()">&times;</span>
+            
+            <div id="form-login">
+                <h2>Acessar Conta</h2>
+                <p>Digite seu nome de usuário para carregar seus torneios.</p>
+                <input type="text" id="loginUsername" placeholder="Nome de usuário (Ex: ArenaBairro)">
+                <button class="btn-primary full" onclick="performLogin()">Entrar</button>
+                <p class="switch-msg">Não tem conta? <a href="#" onclick="toggleAuthMode('register')">Criar agora</a></p>
+            </div>
+
+            <div id="form-register" class="hidden">
+                <h2>Criar Nova Conta</h2>
+                <p>Escolha um nome de usuário único. Seus dados ficarão salvos neste navegador.</p>
+                <input type="text" id="regUsername" placeholder="Crie um usuário">
+                <button class="btn-success full" onclick="performRegister()">Criar Conta</button>
+                <p class="switch-msg">Já tem conta? <a href="#" onclick="toggleAuthMode('login')">Fazer Login</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-dashboard" class="app-container hidden">
+        
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo"><i class="fas fa-futbol"></i> Arena<span>Fut</span></div>
+                <div class="user-info">
+                    <small>Logado como:</small>
+                    <strong id="displayUsername">...</strong>
+                </div>
+            </div>
+
+            <ul class="nav-links">
+                <li onclick="app.showTab('config')" class="active"><i class="fas fa-cog"></i> Configurar</li>
+                <li onclick="app.showTab('teams')"><i class="fas fa-users"></i> Times</li>
+                <li onclick="app.showTab('matches')"><i class="fas fa-calendar-alt"></i> Jogos</li>
+                <li onclick="app.showTab('standings')"><i class="fas fa-list-ol"></i> Classificação</li>
+                <li onclick="app.showTab('stats')"><i class="fas fa-chart-bar"></i> Estatísticas</li>
             </ul>
-            <div class="admin-toggle">
-                <label>Modo Admin</label>
-                <input type="checkbox" id="adminMode" checked onchange="toggleAdmin()">
+
+            <div class="sidebar-footer">
+                <button class="btn-logout" onclick="performLogout()"><i class="fas fa-sign-out-alt"></i> Sair</button>
             </div>
         </nav>
 
         <main class="content">
             
-            <section id="dashboard" class="tab-content active">
-                <h2>Configuração do Campeonato</h2>
+            <section id="tab-config" class="tab-content active">
+                <h2>Meus Campeonatos</h2>
                 <div class="card">
-                    <form id="setupForm">
-                        <div class="form-group">
-                            <label>Nome do Torneio</label>
-                            <input type="text" id="tourneyName" placeholder="Ex: Copa do Bairro 2026">
-                        </div>
-                        <div class="form-group">
-                            <label>Modalidade</label>
-                            <select id="tourneyType">
-                                <option value="futebol">Futebol de Campo</option>
-                                <option value="futsal">Futsal</option>
-                                <option value="society">Fut7 / Society</option>
-                                <option value="areia">Futebol de Areia</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Formato</label>
-                            <select id="tourneyFormat">
-                                <option value="league">Pontos Corridos (Todos contra Todos)</option>
-                                </select>
-                        </div>
-                        <button type="button" class="btn-primary" onclick="initTournament()">Criar/Salvar Torneio</button>
-                        <button type="button" class="btn-danger" onclick="resetData()">Apagar Tudo</button>
-                    </form>
-                </div>
-            </section>
-
-            <section id="teams" class="tab-content">
-                <div class="header-flex">
-                    <h2>Gestão de Equipes</h2>
-                    <button class="btn-primary admin-only" onclick="openModal('teamModal')">+ Nova Equipe</button>
-                </div>
-                <div id="teamsList" class="grid-container">
+                    <h3>Criar/Editar Campeonato</h3>
+                    <div class="form-group">
+                        <label>Nome do Torneio</label>
+                        <input type="text" id="tourneyName" placeholder="Ex: Copa 2026">
                     </div>
+                    <div class="form-group">
+                        <label>Tipo</label>
+                        <select id="tourneyType">
+                            <option value="futebol">Futebol</option>
+                            <option value="futsal">Futsal</option>
+                            <option value="society">Society</option>
+                        </select>
+                    </div>
+                    <button class="btn-primary" onclick="app.saveConfig()">Salvar Configurações</button>
+                    <button class="btn-danger" onclick="app.deleteData()">Apagar Tudo</button>
+                </div>
             </section>
 
-            <section id="matches" class="tab-content">
+            <section id="tab-teams" class="tab-content">
+                <div class="header-flex">
+                    <h2>Equipes</h2>
+                    <button class="btn-primary" onclick="ui.openModal('modal-team')">+ Nova Equipe</button>
+                </div>
+                <div id="teams-list" class="grid-container">
+                    <p class="empty-state">Nenhuma equipe cadastrada.</p>
+                </div>
+            </section>
+
+            <section id="tab-matches" class="tab-content">
                 <div class="header-flex">
                     <h2>Tabela de Jogos</h2>
-                    <button class="btn-secondary admin-only" onclick="generateFixture()">Gerar Tabela Automática</button>
+                    <button class="btn-secondary" onclick="app.generateFixture()">Gerar Tabela Automática</button>
                 </div>
-                <div id="matchesList" class="matches-list">
-                    </div>
+                <div id="matches-list" class="matches-list">
+                    <p class="empty-state">Gere a tabela para ver os jogos.</p>
+                </div>
             </section>
 
-            <section id="standings" class="tab-content">
-                <h2>Tabela de Classificação</h2>
+            <section id="tab-standings" class="tab-content">
+                <h2>Classificação</h2>
                 <div class="table-responsive">
                     <table class="standings-table">
                         <thead>
-                            <tr>
-                                <th>Pos</th>
-                                <th>Time</th>
-                                <th>P</th>
-                                <th>J</th>
-                                <th>V</th>
-                                <th>E</th>
-                                <th>D</th>
-                                <th>GP</th>
-                                <th>GC</th>
-                                <th>SG</th>
-                                <th>%</th>
-                            </tr>
+                            <tr><th>Pos</th><th>Time</th><th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th></tr>
                         </thead>
-                        <tbody id="standingsBody">
-                            </tbody>
+                        <tbody id="standings-body"></tbody>
                     </table>
                 </div>
             </section>
 
-            <section id="stats" class="tab-content">
-                <h2>Estatísticas & Disciplina</h2>
+            <section id="tab-stats" class="tab-content">
+                <h2>Estatísticas</h2>
                 <div class="stats-grid">
                     <div class="card">
-                        <h3><i class="fas fa-futbol"></i> Artilharia</h3>
-                        <ul id="topScorers" class="list-stats"></ul>
+                        <h3>Artilharia ⚽</h3>
+                        <ul id="stats-goals" class="list-stats"></ul>
                     </div>
                     <div class="card">
-                        <h3><i class="fas fa-square" style="color:red"></i> Cartões Vermelhos</h3>
-                        <ul id="redCards" class="list-stats"></ul>
-                    </div>
-                    <div class="card">
-                        <h3><i class="fas fa-square" style="color:yellow"></i> Cartões Amarelos</h3>
-                        <ul id="yellowCards" class="list-stats"></ul>
+                        <h3>Cartões 🟥</h3>
+                        <ul id="stats-cards" class="list-stats"></ul>
                     </div>
                 </div>
-            </section>
-
-            <section id="news" class="tab-content">
-                <h2>Mural & Regulamento</h2>
-                <div class="card">
-                    <h3>Regulamento Oficial</h3>
-                    <textarea id="rulesText" class="rules-area" placeholder="Digite as regras aqui..."></textarea>
-                    <button class="btn-primary admin-only" onclick="saveRules()">Salvar Regras</button>
-                </div>
-                <div class="feed" id="newsFeed">
-                    <h3>Últimas Atualizações</h3>
-                    </div>
             </section>
 
         </main>
     </div>
 
-    <div id="teamModal" class="modal">
+    <div id="modal-team" class="modal">
         <div class="modal-content">
-            <span class="close" onclick="closeModal('teamModal')">&times;</span>
+            <span class="close" onclick="ui.closeModal('modal-team')">&times;</span>
             <h3>Adicionar Equipe</h3>
-            <input type="text" id="newTeamName" placeholder="Nome da Equipe">
-            <button class="btn-primary" onclick="addTeam()">Salvar</button>
+            <input type="text" id="newTeamName" placeholder="Nome do Time">
+            <button class="btn-primary full" onclick="app.addTeam()">Salvar</button>
         </div>
     </div>
 
-    <div id="matchModal" class="modal">
+    <div id="modal-match" class="modal">
         <div class="modal-content large">
-            <span class="close" onclick="closeModal('matchModal')">&times;</span>
-            <h3>Súmula da Partida</h3>
-            <h4 id="matchTitle" style="text-align:center; margin-bottom: 20px;">Time A vs Time B</h4>
-            
-            <div class="score-input">
+            <span class="close" onclick="ui.closeModal('modal-match')">&times;</span>
+            <h3 id="matchTitle">Jogo</h3>
+            <div class="score-board">
                 <input type="number" id="scoreA" placeholder="0">
                 <span>X</span>
                 <input type="number" id="scoreB" placeholder="0">
             </div>
-
-            <div class="match-events">
-                <h5>Eventos (Gols/Cartões)</h5>
-                <div class="form-group">
-                    <select id="eventTeam" onchange="loadPlayersForEvent()">
-                        <option value="">Selecione o Time</option>
-                    </select>
-                    <select id="eventPlayer">
-                        <option value="">Selecione o Jogador</option>
-                    </select>
-                    <select id="eventType">
-                        <option value="goal">Gol</option>
-                        <option value="yellow">Cartão Amarelo</option>
-                        <option value="red">Cartão Vermelho</option>
-                    </select>
-                    <button class="btn-small" onclick="addEvent()">Adicionar</button>
-                </div>
-                <ul id="eventsList" class="events-list-ui"></ul>
-            </div>
-
             <div class="actions">
-                <button class="btn-primary" onclick="saveMatchResult()">Encerrar Jogo & Salvar</button>
+                <button class="btn-primary full" onclick="app.saveMatch()">Salvar Resultado</button>
             </div>
         </div>
     </div>
