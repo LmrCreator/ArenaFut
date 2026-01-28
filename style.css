@@ -1,88 +1,142 @@
 :root {
-    --primary: #2ecc71; /* Verde Futebol */
-    --dark: #2c3e50;
-    --light: #ecf0f1;
-    --danger: #e74c3c;
-    --warning: #f1c40f;
-    --grey: #95a5a6;
+    --primary: #00b894;   /* Verde moderno */
+    --primary-dark: #008f72;
+    --dark: #2d3436;
+    --light: #dfe6e9;
+    --white: #ffffff;
+    --danger: #d63031;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
 
-body { background-color: #f4f7f6; display: flex; height: 100vh; overflow: hidden; }
+body { background-color: #f1f2f6; color: var(--dark); height: 100vh; overflow: hidden; }
 
-/* Sidebar */
+/* UTILS */
+.hidden { display: none !important; }
+.btn-primary { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-outline { border: 2px solid white; background: transparent; color: white; padding: 8px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px; }
+.btn-cta { background: white; color: var(--primary); padding: 15px 30px; border: none; border-radius: 50px; font-size: 1.2rem; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+.btn-secondary { background: var(--dark); color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+.btn-danger { background: var(--danger); color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-top: 10px; }
+.full { width: 100%; margin-top: 10px; }
+
+/* 1. LANDING PAGE */
+.landing-container {
+    height: 100vh;
+    background: linear-gradient(135deg, var(--primary) 0%, #0984e3 100%);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.landing-header {
+    padding: 20px 50px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.landing-header .logo { color: white; font-size: 1.8rem; font-weight: bold; }
+
+.hero {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 100px;
+    color: white;
+}
+.hero-text { max-width: 600px; }
+.hero h1 { font-size: 3.5rem; margin-bottom: 20px; line-height: 1.1; }
+.hero p { font-size: 1.2rem; margin-bottom: 30px; opacity: 0.9; }
+
+/* Auth Box (Login) */
+.auth-box {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    width: 90%; max-width: 400px;
+    text-align: center;
+    z-index: 1000;
+}
+.auth-box input { width: 100%; padding: 12px; margin: 15px 0; border: 2px solid #ddd; border-radius: 5px; font-size: 1rem; }
+.switch-msg { margin-top: 15px; font-size: 0.9rem; }
+.close-auth { position: absolute; top: 10px; right: 15px; font-size: 24px; cursor: pointer; }
+
+/* 2. DASHBOARD APP (Layout Fix) */
+.app-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* Sidebar Fixa */
 .sidebar {
-    width: 250px;
-    background-color: var(--dark);
+    width: 260px;
+    background: var(--dark);
     color: white;
     display: flex;
     flex-direction: column;
-    padding: 20px;
+    flex-shrink: 0; /* Impede encolhimento */
 }
-.logo { font-size: 24px; font-weight: bold; margin-bottom: 40px; color: var(--primary); }
-.logo span { color: white; }
-.sidebar ul { list-style: none; }
-.sidebar li { padding: 15px; cursor: pointer; transition: 0.3s; border-radius: 5px; margin-bottom: 5px; }
-.sidebar li:hover, .sidebar li.active { background-color: var(--primary); }
-.sidebar li i { margin-right: 10px; width: 20px; }
 
-/* Main Content */
-.content { flex: 1; padding: 30px; overflow-y: auto; }
+.sidebar-header { padding: 20px; background: rgba(0,0,0,0.2); }
+.user-info { margin-top: 10px; color: #aaa; font-size: 0.9rem; }
+.user-info strong { color: var(--primary); display: block; font-size: 1.1rem; }
+
+.nav-links { list-style: none; padding: 20px 0; flex: 1; }
+.nav-links li { padding: 15px 25px; cursor: pointer; transition: 0.2s; border-left: 4px solid transparent; }
+.nav-links li:hover, .nav-links li.active { background: rgba(255,255,255,0.05); border-left-color: var(--primary); }
+.nav-links li i { margin-right: 10px; width: 25px; }
+
+.sidebar-footer { padding: 20px; }
+.btn-logout { background: transparent; border: 1px solid #555; color: #aaa; padding: 8px; width: 100%; cursor: pointer; }
+.btn-logout:hover { border-color: white; color: white; }
+
+/* Conteúdo Principal */
+.content {
+    flex: 1;
+    background: #f1f2f6;
+    padding: 30px;
+    overflow-y: auto; /* Scroll apenas aqui */
+}
+
 .tab-content { display: none; animation: fadeIn 0.3s; }
 .tab-content.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-/* Components */
-h2 { margin-bottom: 20px; color: var(--dark); border-bottom: 3px solid var(--primary); display: inline-block; padding-bottom: 5px; }
-.card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
-.btn-primary { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
-.btn-secondary { background: var(--dark); color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
-.btn-danger { background: var(--danger); color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
-.form-group { margin-bottom: 15px; }
-input, select, textarea { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px; }
-
-/* Grid e Listas */
+/* Cards & Tabelas */
+.card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 20px; }
 .grid-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
-.team-card { background: white; padding: 15px; border-left: 5px solid var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-.header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.team-card { background: white; padding: 15px; border-top: 4px solid var(--primary); border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; }
 
-/* Tabela */
-.standings-table { width: 100%; border-collapse: collapse; background: white; }
-.standings-table th, .standings-table td { padding: 12px; text-align: center; border-bottom: 1px solid #ddd; }
-.standings-table th { background-color: var(--dark); color: white; }
-.standings-table tr:nth-child(even) { background-color: #f9f9f9; }
+.matches-list .match-card {
+    background: white; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-radius: 6px; border: 1px solid #eee;
+}
+.match-score { font-weight: bold; background: var(--dark); color: white; padding: 5px 15px; border-radius: 15px; }
 
-/* Jogos */
-.match-card { background: white; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-radius: 5px; border: 1px solid #eee; }
-.match-teams { font-weight: bold; flex: 2; text-align: center; }
-.match-score { background: var(--dark); color: white; padding: 5px 15px; border-radius: 20px; }
-
-/* Stats */
-.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-.list-stats li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+.standings-table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+.standings-table th { background: var(--dark); color: white; padding: 12px; text-align: center; }
+.standings-table td { padding: 12px; text-align: center; border-bottom: 1px solid #eee; }
 
 /* Modal */
-.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
-.modal-content { background: white; padding: 30px; border-radius: 8px; width: 400px; position: relative; }
-.modal-content.large { width: 600px; }
-.close { position: absolute; top: 10px; right: 15px; font-size: 24px; cursor: pointer; }
+.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000; justify-content: center; align-items: center; }
+.modal-content { background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 400px; position: relative; }
+.score-board { display: flex; justify-content: center; align-items: center; gap: 15px; margin: 20px 0; font-size: 2rem; font-weight: bold; }
+.score-board input { width: 70px; text-align: center; font-size: 2rem; border: 2px solid #ddd; border-radius: 5px; }
 
-/* Score Input in Modal */
-.score-input { display: flex; justify-content: center; align-items: center; gap: 15px; margin: 20px 0; font-size: 24px; }
-.score-input input { width: 60px; text-align: center; font-size: 24px; }
-
-.admin-toggle { margin-top: auto; padding-top: 20px; border-top: 1px solid #ffffff33; }
-
-/* Animação */
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-/* Responsividade Básica */
+/* Responsivo */
 @media (max-width: 768px) {
-    body { flex-direction: column; overflow: auto; }
-    .sidebar { width: 100%; padding: 10px; flex-direction: row; align-items: center; justify-content: space-between; overflow-x: auto; }
-    .sidebar ul { display: flex; }
-    .sidebar li { padding: 10px; margin: 0; white-space: nowrap; }
-    .logo { margin-bottom: 0; margin-right: 20px; }
-    .admin-toggle { display: none; } /* Admin fixo no mobile para simplificar */
-    .stats-grid { grid-template-columns: 1fr; }
+    .landing-header { padding: 20px; }
+    .hero { flex-direction: column; text-align: center; padding: 20px; justify-content: center; }
+    .hero-image { display: none; }
+    .app-container { flex-direction: column; overflow-y: auto; }
+    .sidebar { width: 100%; height: auto; flex-direction: row; align-items: center; padding: 10px; justify-content: space-between; }
+    .nav-links { display: none; } /* Simples para mobile: esconde menu ou usa hamburger no futuro */
+    .user-info { display: none; }
+    .content { padding: 15px; }
 }
