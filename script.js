@@ -5,59 +5,89 @@ const SESSION_KEY = 'arenaFut_Session';
 let currentUser = null;
 let currentData = {
     config: { name: '', type: 'futebol', ptsWin: 3, ptsDraw: 1, ptsLoss: 0, cardsSuspension: 3, fineRed: 0 },
-    teams: [], // {id, name, players: []}
-    matches: [] // {id, teamA, teamB, events: [], ended: false}
+    teams: [],
+    matches: []
 };
 
-// --- AUTH (Login/Senha) ---
+// --- INICIALIZAÇÃO E AUTH ---
 document.addEventListener('DOMContentLoaded', () => {
+    
+    // 1. Verifica se já existe login salvo
     const session = localStorage.getItem(SESSION_KEY);
     if(session) {
         const [user, pass] = session.split('|');
-        tryLogin(user, pass);
+        if(user && pass) {
+            executeLogin(user, pass, false); // false = não alerta se der certo
+        }
+    }
+
+    // 2. Configura o Formulário de Login (O botão "Funcionar")
+    const authForm = document.getElementById('authForm');
+    if(authForm) {
+        authForm.addEventListener('submit', function(e) {
+            e.preventDefault(); // Impede recarregar a página
+            
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value.trim();
+
+            if(!user || pass.length < 4) {
+                alert("Por favor, digite um usuário e uma senha com no mínimo 4 dígitos.");
+                return;
+            }
+
+            handleLoginRequest(user, pass);
+        });
     }
 });
 
-function handleAuthSubmit() {
-    const user = document.getElementById('username').value.trim();
-    const pass = document.getElementById('password').value.trim();
-
-    if(!user || pass.length < 4) return alert("Usuário obrigatório e senha deve ter 4+ dígitos.");
-    
-    tryLogin(user, pass);
-}
-
-function tryLogin(user, pass) {
+// Lógica de Decisão: Entrar ou Criar
+function handleLoginRequest(user, pass) {
     const db = JSON.parse(localStorage.getItem(DB_KEY)) || {};
     
     if(db[user]) {
-        if(db[user].password === pass) {
-            currentUser = user;
-            currentData = db[user].data;
-            saveSession(user, pass);
-            showApp();
-        } else {
-            alert("Senha incorreta!");
-        }
+        // Usuário existe, tenta logar
+        executeLogin(user, pass, true);
     } else {
-        // Criar conta
-        if(confirm(`Usuário "${user}" não existe. Criar nova conta?`)) {
-            db[user] = {
-                password: pass,
-                data: {
-                    config: { name: 'Novo Campeonato', type: 'futebol', ptsWin: 3, ptsDraw: 1, ptsLoss: 0, cardsSuspension: 3, fineRed: 0 },
-                    teams: [],
-                    matches: []
-                }
-            };
-            localStorage.setItem(DB_KEY, JSON.stringify(db));
-            tryLogin(user, pass);
+        // Usuário não existe, pergunta se quer criar
+        if(confirm(`O usuário "${user}" não existe. Deseja criar uma conta nova agora?`)) {
+            createNewAccount(user, pass);
         }
     }
 }
 
-function saveSession(user, pass) {
-    localStorage.setItem(SESSION_KEY, `${user}|${pass}`);
+function createNewAccount(user, pass) {
+    const db = JSON.parse(localStorage.getItem(DB_KEY)) || {};
+    
+    // Estrutura inicial da conta
+    db[user] = {
+        password: pass,
+        data: {
+            config: { name: 'Meu Novo Campeonato', type: 'futebol', ptsWin: 3, ptsDraw: 1, ptsLoss: 0, cardsSuspension: 3, fineRed: 0 },
+            teams: [],
+            matches: []
+        }
+    };
+
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+    alert("Conta criada com sucesso!");
+    executeLogin(user, pass, true);
+}
+
+function executeLogin(user, pass, showAlert) {
+    const db = JSON.parse(localStorage.getItem(DB_KEY)) || {};
+
+    if(db[user] && db[user].password === pass) {
+        currentUser = user;
+        currentData = db[user].data;
+        
+        // Salva sessão
+        localStorage.setItem(SESSION_KEY, `${user}|${pass}`);
+        
+        // Inicia App
+        showApp();
+    } else {
+        if(showAlert) alert("Senha incorreta!");
+    }
 }
 
 function performLogout() {
@@ -66,28 +96,30 @@ function performLogout() {
 }
 
 function saveData() {
-    const db = JSON.parse(localStorage.getItem(DB_KEY));
+    if(!currentUser) return;
+    const db = JSON.parse(localStorage.getItem(DB_KEY)) || {};
     db[currentUser].data = currentData;
     localStorage.setItem(DB_KEY, JSON.stringify(db));
     app.renderAll();
 }
 
-// --- APP LÓGICA ---
+// --- APP LÓGICA (Tudo igual, garantindo funcionamento) ---
 const app = {
     tempMatchId: null,
     tempTeamId: null,
 
     showTab: (id) => {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-        document.getElementById(`tab-${id}`).classList.add('active');
+        const target = document.getElementById(`tab-${id}`);
+        if(target) target.classList.add('active');
         app.renderAll();
     },
 
     renderAll: () => {
         // UI Updates
         document.getElementById('displayUsername').innerText = currentUser;
-        document.getElementById('tourneyName').value = currentData.config.name;
-        document.getElementById('tourneyType').value = currentData.config.type;
+        document.getElementById('tourneyName').value = currentData.config.name || '';
+        document.getElementById('tourneyType').value = currentData.config.type || 'futebol';
         
         // Regras Values
         document.getElementById('ptsWin').value = currentData.config.ptsWin;
@@ -171,7 +203,7 @@ const app = {
                 <td>${p.number}</td>
                 <td>${p.name}</td>
                 <td>${p.pos}</td>
-                <td><button onclick="app.removePlayer(${idx})" style="color:red;border:none;background:none">X</button></td>
+                <td><button onclick="app.removePlayer(${idx})" style="color:red;border:none;background:none;cursor:pointer">X</button></td>
             </tr>
         `).join('');
     },
@@ -201,6 +233,7 @@ const app = {
             }
         }
         saveData();
+        app.renderAll(); // Atualiza tudo
     },
 
     renderMatches: () => {
@@ -209,6 +242,9 @@ const app = {
             const tA = currentData.teams.find(t => t.id === m.teamA);
             const tB = currentData.teams.find(t => t.id === m.teamB);
             
+            // Segurança caso um time tenha sido deletado
+            if(!tA || !tB) return '';
+
             // Calcular placar baseado nos eventos
             const goalsA = m.events.filter(e => e.type === 'goal' && e.teamId === m.teamA).length;
             const goalsB = m.events.filter(e => e.type === 'goal' && e.teamId === m.teamB).length;
@@ -240,6 +276,9 @@ const app = {
                              <option value="${tA.id}">${tA.name}</option>
                              <option value="${tB.id}">${tB.name}</option>`;
         
+        // Limpa select de jogador
+        document.getElementById('eventPlayerSelect').innerHTML = '<option>Jogador</option>';
+
         app.updateScoreboard();
         ui.openModal('modal-match');
     },
@@ -265,7 +304,7 @@ const app = {
         const player = team.players.find(p => p.id === playerId);
 
         m.events.push({
-            teamId, playerId, playerName: player.name, type, time
+            teamId, playerId, playerName: player.name, type, time: parseInt(time)
         });
 
         // Ordenar eventos por tempo
@@ -315,6 +354,9 @@ const app = {
 
                 let sA = stats[m.teamA];
                 let sB = stats[m.teamB];
+
+                // Segurança
+                if(!sA || !sB) return;
 
                 sA.J++; sB.J++;
                 sA.GP += goalsA; sA.GC += goalsB; sA.SG = sA.GP - sA.GC;
@@ -370,7 +412,8 @@ const ui = {
     showApp: () => {
         document.getElementById('landing-page').classList.add('hidden');
         document.getElementById('app-dashboard').classList.remove('hidden');
+        app.showTab('config');
     }
 };
 
-function showApp() { ui.showApp(); app.showTab('config'); }
+function showApp() { ui.showApp(); }
