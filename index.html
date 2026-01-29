@@ -19,18 +19,18 @@
                 <h2>Bem-vindo</h2>
                 <p>Gerencie seus campeonatos gratuitamente.</p>
                 
-                <form id="authForm" onsubmit="event.preventDefault(); handleAuthSubmit();">
+                <form id="authForm">
                     <div class="input-group">
                         <label>Usuário</label>
-                        <input type="text" id="username" name="username" placeholder="Seu nome de usuário" autocomplete="username" required>
+                        <input type="text" id="username" name="username" placeholder="Crie um nome de usuário" autocomplete="username" required>
                     </div>
                     <div class="input-group">
                         <label>Senha (4+ dígitos)</label>
-                        <input type="password" id="password" name="password" placeholder="Senha secreta" autocomplete="current-password" minlength="4" required>
+                        <input type="password" id="password" name="password" placeholder="Sua senha secreta" autocomplete="current-password" minlength="4" required>
                     </div>
                     
                     <button type="submit" class="btn-primary full">Entrar / Criar Conta</button>
-                    <small style="display:block; margin-top:10px; color:#666;">Se a conta não existir, ela será criada automaticamente.</small>
+                    <small style="display:block; margin-top:10px; color:#666;">Se o usuário não existir, ele será criado automaticamente.</small>
                 </form>
             </div>
         </div>
