@@ -1,6 +1,6 @@
 // --- CONFIGURAÇÃO SUPABASE ---
-const SUPABASE_URL = 'https://SUA_URL_AQUI.supabase.co';
-const SUPABASE_KEY = 'SUA_KEY_ANON_PUBLIC_AQUI';
+const SUPABASE_URL = 'https://irervfyouykavrfizgbp.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_cIf6g2c8wBIZTaGakhOwvQ_qzBlDtcn';
 const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const SESSION_KEY = 'arenaFut_Session';
