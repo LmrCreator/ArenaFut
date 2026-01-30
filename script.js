@@ -1,11 +1,15 @@
-// --- BANCO DE DADOS E SESSÃO ---
-const DB_KEY = 'arenaFut_DB';
+// --- CONFIGURAÇÃO SUPABASE ---
+const SUPABASE_URL = 'https://SUA_URL_AQUI.supabase.co';
+const SUPABASE_KEY = 'SUA_KEY_ANON_PUBLIC_AQUI';
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 const SESSION_KEY = 'arenaFut_Session';
 
 // Estado Global
 let currentUser = null;
+let currentPassword = null;
 let currentData = {
-    config: { name: '', type: 'futebol', ptsWin:3, ptsDraw:1, ptsLoss:0, cardsSuspension:3, fineRed:0 },
+    config: { name: '', type: 'futebol', ptsWin: 3, ptsDraw: 1, ptsLoss: 0, cardsSuspension: 3, fineRed: 0 },
     teams: [],
     matches: []
 };
@@ -15,72 +19,72 @@ document.addEventListener('DOMContentLoaded', () => {
     initAuth();
 });
 
-function initAuth() {
-    // 1. Tenta recuperar sessão salva
+async function initAuth() {
     const session = localStorage.getItem(SESSION_KEY);
-    if(session) {
+    if (session) {
         const [user, pass] = session.split('|');
-        if(loginLogic(user, pass, false)) {
-            return; // Se logou, para aqui.
-        }
+        const success = await loginLogic(user, pass);
+        if (success) return;
     }
 
-    // 2. Configura o formulário de login
     const form = document.getElementById('loginForm');
-    form.addEventListener('submit', (e) => {
-        e.preventDefault(); // IMPORTANTE: Impede recarregar a página
-        
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
         const u = document.getElementById('usernameInput').value.trim();
         const p = document.getElementById('passwordInput').value.trim();
-        
-        if(!u || p.length < 4) return alert("Preencha corretamente.");
-
+        if (!u || p.length < 4) return alert("Preencha corretamente.");
         handleLoginOrRegister(u, p);
     });
 }
 
-function handleLoginOrRegister(user, pass) {
-    const db = getDB();
-    
-    if(db[user]) {
-        // Tenta logar
-        if(!loginLogic(user, pass, true)) {
+async function handleLoginOrRegister(user, pass) {
+    const { data, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('username', user)
+        .single();
+
+    if (data) {
+        if (data.password === pass) {
+            loginLogic(user, pass);
+        } else {
             alert("Senha incorreta!");
         }
     } else {
-        // Tenta registrar
-        if(confirm(`Usuário "${user}" não existe. Criar nova conta?`)) {
+        if (confirm(`Usuário "${user}" não existe. Criar nova conta?`)) {
             createAccount(user, pass);
         }
     }
 }
 
-function createAccount(user, pass) {
-    const db = getDB();
-    db[user] = {
-        password: pass,
-        data: {
-            config: { name: 'Novo Campeonato', type: 'futebol', ptsWin:3, ptsDraw:1, ptsLoss:0, cardsSuspension:3, fineRed:0 },
-            teams: [],
-            matches: []
-        }
-    };
-    saveDB(db);
+async function createAccount(user, pass) {
+    const { error } = await supabase
+        .from('usuarios')
+        .insert([{ username: user, password: pass }]);
+
+    if (error) return alert("Erro ao criar conta: " + error.message);
+    
     alert("Conta criada! Entrando...");
-    loginLogic(user, pass, true);
+    loginLogic(user, pass);
 }
 
-function loginLogic(user, pass, showAlert) {
-    const db = getDB();
-    if(db[user] && db[user].password === pass) {
+async function loginLogic(user, pass) {
+    const { data, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('username', user)
+        .eq('password', pass)
+        .single();
+
+    if (data) {
         currentUser = user;
-        currentData = db[user].data;
+        currentPassword = pass;
+        currentData = data.data;
         localStorage.setItem(SESSION_KEY, `${user}|${pass}`);
-        
-        // REDIRECIONAMENTO (Troca de Telas)
+
         document.getElementById('landing-page').classList.add('hidden');
         document.getElementById('app-dashboard').classList.remove('hidden');
-        
+
         app.renderAll();
         return true;
     }
@@ -92,15 +96,21 @@ function performLogout() {
     location.reload();
 }
 
-// --- UTILITÁRIOS DE BD ---
-function getDB() { return JSON.parse(localStorage.getItem(DB_KEY)) || {}; }
-function saveDB(db) { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
-function saveData() {
-    if(!currentUser) return;
-    const db = getDB();
-    db[currentUser].data = currentData;
-    saveDB(db);
-    app.renderAll(); // Atualiza a tela sempre que salvar
+// --- SALVAMENTO REMOTO NO SUPABASE ---
+async function saveData() {
+    if (!currentUser) return;
+    
+    const { error } = await supabase
+        .from('usuarios')
+        .update({ data: currentData })
+        .eq('username', currentUser);
+
+    if (error) {
+        console.error("Erro ao salvar:", error);
+        alert("Erro ao sincronizar dados com o servidor.");
+    } else {
+        app.renderAll();
+    }
 }
 
 // --- APLICAÇÃO (DASHBOARD) ---
@@ -109,46 +119,41 @@ const app = {
     tempTeamId: null,
 
     showTab: (tabId) => {
-        // Esconde todas
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.nav-links li').forEach(el => el.classList.remove('active'));
         
-        // Mostra a certa
         document.getElementById(`tab-${tabId}`).classList.add('active');
         const link = document.getElementById(`link-${tabId}`);
-        if(link) link.classList.add('active');
+        if (link) link.classList.add('active');
         
         app.renderAll();
     },
 
     renderAll: () => {
-        // Atualiza Infos do Usuário
         document.getElementById('displayUsername').innerText = currentUser;
         
-        // Configs e Regras
         const c = currentData.config;
-        document.getElementById('tourneyName').value = c.name;
-        document.getElementById('tourneyType').value = c.type;
+        document.getElementById('tourneyName').value = c.name || '';
+        document.getElementById('tourneyType').value = c.type || 'futebol';
         document.getElementById('ptsWin').value = c.ptsWin;
         document.getElementById('ptsDraw').value = c.ptsDraw;
         document.getElementById('ptsLoss').value = c.ptsLoss;
         document.getElementById('cardsSuspension').value = c.cardsSuspension;
         document.getElementById('fineRed').value = c.fineRed;
 
-        // Listas
         app.renderTeams();
         app.renderMatches();
         app.renderStandings();
         app.renderStats();
     },
 
-    // --- FUNÇÕES DE SALVAR ---
     saveConfig: () => {
         currentData.config.name = document.getElementById('tourneyName').value;
         currentData.config.type = document.getElementById('tourneyType').value;
         saveData();
         alert("Configurações Salvas!");
     },
+
     saveRules: () => {
         const c = currentData.config;
         c.ptsWin = Number(document.getElementById('ptsWin').value);
@@ -160,15 +165,15 @@ const app = {
         alert("Regras Salvas!");
     },
 
-    // --- TIMES ---
     addTeam: () => {
         const name = document.getElementById('newTeamName').value;
-        if(!name) return;
+        if (!name) return;
         currentData.teams.push({ id: Date.now(), name: name, players: [] });
         document.getElementById('newTeamName').value = '';
         ui.closeModal('modal-team');
         saveData();
     },
+
     renderTeams: () => {
         const list = document.getElementById('teams-list');
         list.innerHTML = currentData.teams.map(t => `
@@ -179,7 +184,6 @@ const app = {
         `).join('');
     },
 
-    // --- ELENCO ---
     openSquad: (id) => {
         app.tempTeamId = id;
         const t = currentData.teams.find(x => x.id === id);
@@ -187,19 +191,20 @@ const app = {
         app.renderSquadList();
         ui.openModal('modal-squad');
     },
+
     addPlayer: () => {
         const n = document.getElementById('pName').value;
         const num = document.getElementById('pNumber').value;
         const pos = document.getElementById('pPos').value;
-        if(!n) return;
-        
+        if (!n) return;
         const t = currentData.teams.find(x => x.id === app.tempTeamId);
         t.players.push({ id: Date.now(), name: n, number: num, pos: pos });
-        
         document.getElementById('pName').value = '';
         document.getElementById('pNumber').value = '';
         saveData();
+        app.renderSquadList();
     },
+
     renderSquadList: () => {
         const t = currentData.teams.find(x => x.id === app.tempTeamId);
         document.getElementById('squad-list-body').innerHTML = t.players.map((p, i) => `
@@ -211,20 +216,22 @@ const app = {
             </tr>
         `).join('');
     },
+
     removePlayer: (idx) => {
         const t = currentData.teams.find(x => x.id === app.tempTeamId);
         t.players.splice(idx, 1);
         saveData();
+        app.renderSquadList();
     },
 
-    // --- JOGOS ---
     generateFixture: () => {
         const teams = currentData.teams;
-        if(teams.length < 2) return alert("Precisa de pelo menos 2 times!");
-        currentData.matches = [];
+        if (teams.length < 2) return alert("Precisa de pelo menos 2 times!");
+        if (!confirm("Isso apagará os jogos atuais. Continuar?")) return;
         
-        for(let i=0; i<teams.length; i++) {
-            for(let j=i+1; j<teams.length; j++) {
+        currentData.matches = [];
+        for (let i = 0; i < teams.length; i++) {
+            for (let j = i + 1; j < teams.length; j++) {
                 currentData.matches.push({
                     id: Date.now() + Math.random(),
                     teamA: teams[i].id,
@@ -236,12 +243,13 @@ const app = {
         }
         saveData();
     },
+
     renderMatches: () => {
         const list = document.getElementById('matches-list');
         list.innerHTML = currentData.matches.map(m => {
             const tA = currentData.teams.find(x => x.id === m.teamA);
             const tB = currentData.teams.find(x => x.id === m.teamB);
-            if(!tA || !tB) return ''; // Proteção
+            if (!tA || !tB) return '';
 
             const gA = m.events.filter(e => e.type === 'goal' && e.teamId == m.teamA).length;
             const gB = m.events.filter(e => e.type === 'goal' && e.teamId == m.teamB).length;
@@ -256,7 +264,6 @@ const app = {
         }).join('');
     },
 
-    // --- SÚMULA (MATCH) ---
     openMatch: (mid) => {
         app.tempMatchId = mid;
         const m = currentData.matches.find(x => x.id === mid);
@@ -266,7 +273,6 @@ const app = {
         document.getElementById('mTeamA').innerText = tA.name;
         document.getElementById('mTeamB').innerText = tB.name;
 
-        // Select de Time
         const selT = document.getElementById('evtTeam');
         selT.innerHTML = `<option value="">Escolha...</option>
                           <option value="${tA.id}">${tA.name}</option>
@@ -276,21 +282,23 @@ const app = {
         app.updateScoreUI();
         ui.openModal('modal-match');
     },
+
     loadPlayersForEvent: () => {
         const tid = document.getElementById('evtTeam').value;
-        if(!tid) return;
+        if (!tid) return;
         const t = currentData.teams.find(x => x.id == tid);
         document.getElementById('evtPlayer').innerHTML = t.players.map(p => 
             `<option value="${p.id}">${p.number} - ${p.name}</option>`
         ).join('');
     },
+
     addEvent: () => {
         const tid = document.getElementById('evtTeam').value;
         const pid = document.getElementById('evtPlayer').value;
         const type = document.getElementById('evtType').value;
         const time = document.getElementById('evtTime').value;
 
-        if(!tid || !pid || !time) return alert("Preencha o lance completo!");
+        if (!tid || !pid || !time) return alert("Preencha o lance completo!");
         
         const m = currentData.matches.find(x => x.id === app.tempMatchId);
         const t = currentData.teams.find(x => x.id == tid);
@@ -302,6 +310,7 @@ const app = {
         saveData();
         app.updateScoreUI();
     },
+
     updateScoreUI: () => {
         const m = currentData.matches.find(x => x.id === app.tempMatchId);
         const gA = m.events.filter(e => e.type === 'goal' && e.teamId == m.teamA).length;
@@ -315,6 +324,7 @@ const app = {
             return `<li>${e.time}' ${icon} ${e.pName}</li>`;
         }).join('');
     },
+
     finishMatch: () => {
         const m = currentData.matches.find(x => x.id === app.tempMatchId);
         m.ended = true;
@@ -322,26 +332,25 @@ const app = {
         ui.closeModal('modal-match');
     },
 
-    // --- TABELA E STATS ---
     renderStandings: () => {
         let st = {};
         currentData.teams.forEach(t => st[t.id] = { name:t.name, P:0, J:0, V:0, E:0, D:0, GP:0, GC:0, SG:0 });
         const c = currentData.config;
 
         currentData.matches.forEach(m => {
-            if(m.ended) {
+            if (m.ended) {
                 const gA = m.events.filter(e => e.type === 'goal' && e.teamId == m.teamA).length;
                 const gB = m.events.filter(e => e.type === 'goal' && e.teamId == m.teamB).length;
                 
                 const sA = st[m.teamA]; const sB = st[m.teamB];
-                if(!sA || !sB) return;
+                if (!sA || !sB) return;
 
                 sA.J++; sB.J++;
                 sA.GP += gA; sA.GC += gB; sA.SG = sA.GP - sA.GC;
                 sB.GP += gB; sB.GC += gA; sB.SG = sB.GP - sB.GC;
 
-                if(gA > gB) { sA.V++; sA.P += c.ptsWin; sB.D++; sB.P += c.ptsLoss; }
-                else if(gB > gA) { sB.V++; sB.P += c.ptsWin; sA.D++; sA.P += c.ptsLoss; }
+                if (gA > gB) { sA.V++; sA.P += c.ptsWin; sB.D++; sB.P += c.ptsLoss; }
+                else if (gB > gA) { sB.V++; sB.P += c.ptsWin; sA.D++; sA.P += c.ptsLoss; }
                 else { sA.E++; sB.E++; sA.P += c.ptsDraw; sB.P += c.ptsDraw; }
             }
         });
@@ -356,10 +365,10 @@ const app = {
         let players = {};
         currentData.matches.forEach(m => {
             m.events.forEach(e => {
-                if(!players[e.playerId]) players[e.playerId] = { name: e.pName, goal:0, yellow:0, red:0 };
-                if(e.type === 'goal') players[e.playerId].goal++;
-                if(e.type === 'yellow') players[e.playerId].yellow++;
-                if(e.type === 'red') players[e.playerId].red++;
+                if (!players[e.playerId]) players[e.playerId] = { name: e.pName, goal:0, yellow:0, red:0 };
+                if (e.type === 'goal') players[e.playerId].goal++;
+                if (e.type === 'yellow') players[e.playerId].yellow++;
+                if (e.type === 'red') players[e.playerId].red++;
             });
         });
 
@@ -373,7 +382,6 @@ const app = {
     }
 };
 
-// --- UI HELPERS ---
 const ui = {
     openModal: (id) => document.getElementById(id).style.display = 'flex',
     closeModal: (id) => document.getElementById(id).style.display = 'none'
