@@ -1,388 +1,509 @@
-// --- CONFIGURAÇÃO SUPABASE ---
-const SUPABASE_URL = 'https://irervfyouykavrfizgbp.supabase.co';
+// --- CONFIGURAÇÃO ---
+const SUPABASE_URL = 'https://irervfyouykavrfizgbp.supabase.co'; 
 const SUPABASE_KEY = 'sb_publishable_cIf6g2c8wBIZTaGakhOwvQ_qzBlDtcn';
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const SESSION_KEY = 'arenaFut_Session';
+const SESSION_KEY = 'ArenaFut_V3_Session';
 
 // Estado Global
-let currentUser = null;
-let currentPassword = null;
-let currentData = {
-    config: { name: '', type: 'futebol', ptsWin: 3, ptsDraw: 1, ptsLoss: 0, cardsSuspension: 3, fineRed: 0 },
-    teams: [],
-    matches: []
+let state = {
+    user: null,
+    allTourneys: [],
+    currentIdx: null,
+    isReadOnly: false
 };
 
 // --- INICIALIZAÇÃO ---
-document.addEventListener('DOMContentLoaded', () => {
-    initAuth();
+document.addEventListener('DOMContentLoaded', async () => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('u') && params.has('id')) {
+        await auth.loadPublicMode(params.get('u'), params.get('id'));
+    } else {
+        await auth.checkSession();
+    }
 });
 
-async function initAuth() {
-    const session = localStorage.getItem(SESSION_KEY);
-    if (session) {
-        const [user, pass] = session.split('|');
-        const success = await loginLogic(user, pass);
-        if (success) return;
-    }
-
-    const form = document.getElementById('loginForm');
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const u = document.getElementById('usernameInput').value.trim();
-        const p = document.getElementById('passwordInput').value.trim();
-        if (!u || p.length < 4) return alert("Preencha corretamente.");
-        handleLoginOrRegister(u, p);
-    });
-}
-
-async function handleLoginOrRegister(user, pass) {
-    const { data, error } = await supabase
-        .from('usuarios')
-        .select('*')
-        .eq('username', user)
-        .single();
-
-    if (data) {
-        if (data.password === pass) {
-            loginLogic(user, pass);
-        } else {
-            alert("Senha incorreta!");
+// --- AUTH ---
+const auth = {
+    checkSession: async () => {
+        const session = localStorage.getItem(SESSION_KEY);
+        if (session) {
+            const [u, p] = session.split('|');
+            if(await auth.login(u, p)) return;
         }
-    } else {
-        if (confirm(`Usuário "${user}" não existe. Criar nova conta?`)) {
-            createAccount(user, pass);
+        document.getElementById('loginForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            auth.handleLogin();
+        });
+    },
+    handleLogin: async () => {
+        const u = document.getElementById('usernameInput').value;
+        const p = document.getElementById('passwordInput').value;
+        if (!await auth.login(u, p)) {
+            if(confirm("Criar nova conta?")) auth.register(u, p);
+        }
+    },
+    login: async (u, p) => {
+        const { data } = await _supabase.from('usuarios').select('*').eq('username', u).maybeSingle();
+        if (data && data.password === p) {
+            state.user = u;
+            state.allTourneys = data.data_tourneys || [];
+            localStorage.setItem(SESSION_KEY, `${u}|${p}`);
+            ui.showSelector();
+            return true;
+        }
+        return false;
+    },
+    register: async (u, p) => {
+        await _supabase.from('usuarios').insert([{ username: u, password: p, data_tourneys: [] }]);
+        auth.login(u, p);
+    },
+    logout: () => {
+        localStorage.removeItem(SESSION_KEY);
+        location.href = location.pathname;
+    },
+    loadPublicMode: async (u, id) => {
+        const { data } = await _supabase.from('usuarios').select('data_tourneys').eq('username', u).maybeSingle();
+        if (data) {
+            const t = data.data_tourneys.find(x => x.id == id);
+            if (t) {
+                state.isReadOnly = true;
+                state.allTourneys = [t];
+                state.currentIdx = 0;
+                ui.preparePublic();
+                app.loadTourney(0);
+            }
         }
     }
-}
+};
 
-async function createAccount(user, pass) {
-    const { error } = await supabase
-        .from('usuarios')
-        .insert([{ username: user, password: pass }]);
-
-    if (error) return alert("Erro ao criar conta: " + error.message);
-    
-    alert("Conta criada! Entrando...");
-    loginLogic(user, pass);
-}
-
-async function loginLogic(user, pass) {
-    const { data, error } = await supabase
-        .from('usuarios')
-        .select('*')
-        .eq('username', user)
-        .eq('password', pass)
-        .single();
-
-    if (data) {
-        currentUser = user;
-        currentPassword = pass;
-        currentData = data.data;
-        localStorage.setItem(SESSION_KEY, `${user}|${pass}`);
-
-        document.getElementById('landing-page').classList.add('hidden');
-        document.getElementById('app-dashboard').classList.remove('hidden');
-
-        app.renderAll();
-        return true;
-    }
-    return false;
-}
-
-function performLogout() {
-    localStorage.removeItem(SESSION_KEY);
-    location.reload();
-}
-
-// --- SALVAMENTO REMOTO NO SUPABASE ---
-async function saveData() {
-    if (!currentUser) return;
-    
-    const { error } = await supabase
-        .from('usuarios')
-        .update({ data: currentData })
-        .eq('username', currentUser);
-
-    if (error) {
-        console.error("Erro ao salvar:", error);
-        alert("Erro ao sincronizar dados com o servidor.");
-    } else {
-        app.renderAll();
-    }
-}
-
-// --- APLICAÇÃO (DASHBOARD) ---
+// --- APP CORE ---
 const app = {
-    tempMatchId: null,
-    tempTeamId: null,
-
-    showTab: (tabId) => {
-        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.nav-links li').forEach(el => el.classList.remove('active'));
-        
-        document.getElementById(`tab-${tabId}`).classList.add('active');
-        const link = document.getElementById(`link-${tabId}`);
-        if (link) link.classList.add('active');
-        
+    // 1. CAMPEONATOS
+    createTourney: () => {
+        const name = document.getElementById('newTourneyName').value;
+        if(!name) return;
+        state.allTourneys.push({
+            id: Date.now(),
+            config: { name, ptsWin: 3, ptsDraw: 1 },
+            teams: [],
+            matches: [],
+            knockout: []
+        });
+        app.save();
+        ui.closeModal('modal-new-tourney');
+        ui.renderTourneyList();
+    },
+    loadTourney: (idx) => {
+        state.currentIdx = idx;
+        ui.showDashboard();
+        app.renderAll();
+    },
+    exitTourney: () => {
+        if(state.isReadOnly) location.href = location.pathname;
+        else ui.showSelector();
+    },
+    saveConfig: () => {
+        if(state.isReadOnly) return;
+        const t = getCurrent();
+        t.config.name = document.getElementById('confName').value;
+        t.config.ptsWin = parseInt(document.getElementById('confWin').value);
+        t.config.ptsDraw = parseInt(document.getElementById('confDraw').value);
+        app.save();
         app.renderAll();
     },
 
-    renderAll: () => {
-        document.getElementById('displayUsername').innerText = currentUser;
-        
-        const c = currentData.config;
-        document.getElementById('tourneyName').value = c.name || '';
-        document.getElementById('tourneyType').value = c.type || 'futebol';
-        document.getElementById('ptsWin').value = c.ptsWin;
-        document.getElementById('ptsDraw').value = c.ptsDraw;
-        document.getElementById('ptsLoss').value = c.ptsLoss;
-        document.getElementById('cardsSuspension').value = c.cardsSuspension;
-        document.getElementById('fineRed').value = c.fineRed;
-
-        app.renderTeams();
-        app.renderMatches();
-        app.renderStandings();
-        app.renderStats();
-    },
-
-    saveConfig: () => {
-        currentData.config.name = document.getElementById('tourneyName').value;
-        currentData.config.type = document.getElementById('tourneyType').value;
-        saveData();
-        alert("Configurações Salvas!");
-    },
-
-    saveRules: () => {
-        const c = currentData.config;
-        c.ptsWin = Number(document.getElementById('ptsWin').value);
-        c.ptsDraw = Number(document.getElementById('ptsDraw').value);
-        c.ptsLoss = Number(document.getElementById('ptsLoss').value);
-        c.cardsSuspension = Number(document.getElementById('cardsSuspension').value);
-        c.fineRed = Number(document.getElementById('fineRed').value);
-        saveData();
-        alert("Regras Salvas!");
-    },
-
+    // 2. TIMES & ELENCO
     addTeam: () => {
-        const name = document.getElementById('newTeamName').value;
-        if (!name) return;
-        currentData.teams.push({ id: Date.now(), name: name, players: [] });
-        document.getElementById('newTeamName').value = '';
+        if(state.isReadOnly) return;
+        const name = document.getElementById('teamNameInput').value;
+        const logo = document.getElementById('teamLogoInput').value;
+        if(!name) return;
+        getCurrent().teams.push({ id: Date.now(), name, logo, players: [] }); // Players array init
+        document.getElementById('teamNameInput').value = '';
         ui.closeModal('modal-team');
-        saveData();
+        app.save();
+        app.renderTeams();
     },
-
-    renderTeams: () => {
-        const list = document.getElementById('teams-list');
-        list.innerHTML = currentData.teams.map(t => `
-            <div class="team-card" onclick="app.openSquad(${t.id})">
-                <h4>${t.name}</h4>
-                <small>${t.players.length} Jogadores</small>
-            </div>
-        `).join('');
-    },
-
-    openSquad: (id) => {
-        app.tempTeamId = id;
-        const t = currentData.teams.find(x => x.id === id);
-        document.getElementById('squadTeamName').innerText = t.name;
-        app.renderSquadList();
+    
+    // Abrir modal de Elenco
+    currentTeamId: null,
+    openSquadModal: (teamId) => {
+        if(state.isReadOnly) return;
+        app.currentTeamId = teamId;
+        const t = getCurrent().teams.find(x => x.id === teamId);
+        document.getElementById('squadTitle').innerText = `Elenco: ${t.name}`;
+        ui.renderSquadList(t);
         ui.openModal('modal-squad');
     },
 
-    addPlayer: () => {
-        const n = document.getElementById('pName').value;
-        const num = document.getElementById('pNumber').value;
-        const pos = document.getElementById('pPos').value;
-        if (!n) return;
-        const t = currentData.teams.find(x => x.id === app.tempTeamId);
-        t.players.push({ id: Date.now(), name: n, number: num, pos: pos });
-        document.getElementById('pName').value = '';
-        document.getElementById('pNumber').value = '';
-        saveData();
-        app.renderSquadList();
+    addPlayerToSquad: () => {
+        const name = document.getElementById('playerNameInput').value;
+        if(!name) return;
+        const team = getCurrent().teams.find(x => x.id === app.currentTeamId);
+        team.players.push({ id: Date.now(), name: name });
+        document.getElementById('playerNameInput').value = '';
+        app.save();
+        ui.renderSquadList(team);
     },
 
-    renderSquadList: () => {
-        const t = currentData.teams.find(x => x.id === app.tempTeamId);
-        document.getElementById('squad-list-body').innerHTML = t.players.map((p, i) => `
-            <tr>
-                <td>${p.number}</td>
-                <td>${p.name}</td>
-                <td>${p.pos}</td>
-                <td><button onclick="app.removePlayer(${i})" style="color:red;border:none;background:transparent;cursor:pointer">X</button></td>
-            </tr>
-        `).join('');
+    removePlayer: (pId) => {
+        const team = getCurrent().teams.find(x => x.id === app.currentTeamId);
+        team.players = team.players.filter(p => p.id !== pId);
+        app.save();
+        ui.renderSquadList(team);
     },
 
-    removePlayer: (idx) => {
-        const t = currentData.teams.find(x => x.id === app.tempTeamId);
-        t.players.splice(idx, 1);
-        saveData();
-        app.renderSquadList();
-    },
-
+    // 3. JOGOS E SÚMULA
     generateFixture: () => {
-        const teams = currentData.teams;
-        if (teams.length < 2) return alert("Precisa de pelo menos 2 times!");
-        if (!confirm("Isso apagará os jogos atuais. Continuar?")) return;
-        
-        currentData.matches = [];
-        for (let i = 0; i < teams.length; i++) {
-            for (let j = i + 1; j < teams.length; j++) {
-                currentData.matches.push({
+        if(state.isReadOnly) return;
+        const t = getCurrent();
+        if(!confirm("Gerar tabela apagará jogos existentes. Continuar?")) return;
+        t.matches = [];
+        for(let i=0; i<t.teams.length; i++) {
+            for(let j=i+1; j<t.teams.length; j++) {
+                t.matches.push({
                     id: Date.now() + Math.random(),
-                    teamA: teams[i].id,
-                    teamB: teams[j].id,
-                    events: [],
+                    teamA: t.teams[i].id,
+                    teamB: t.teams[j].id,
+                    scoreA: 0, scoreB: 0,
+                    events: [], // Array de eventos (Gols, Cartões)
                     ended: false
                 });
             }
         }
-        saveData();
+        app.save();
+        app.renderMatches();
+    },
+
+    currentMatchId: null,
+    openMatchModal: (mId) => {
+        app.currentMatchId = mId;
+        const t = getCurrent();
+        const m = t.matches.find(x => x.id === mId);
+        const teamA = t.teams.find(x => x.id === m.teamA);
+        const teamB = t.teams.find(x => x.id === m.teamB);
+
+        // UI Text
+        document.getElementById('mTeamA').innerText = teamA.name;
+        document.getElementById('mTeamB').innerText = teamB.name;
+        
+        // Popula Selects de Eventos (apenas se for admin)
+        if (!state.isReadOnly) {
+            const selTeam = document.getElementById('eventTeamSel');
+            selTeam.innerHTML = `
+                <option value="${teamA.id}">${teamA.name}</option>
+                <option value="${teamB.id}">${teamB.name}</option>
+            `;
+            app.updatePlayerSelect(); // Popula jogadores do time A inicialmente
+        }
+
+        ui.renderMatchStats(m); // Mostra placar e timeline
+        ui.openModal('modal-match');
+    },
+
+    updatePlayerSelect: () => {
+        const tId = parseInt(document.getElementById('eventTeamSel').value);
+        const team = getCurrent().teams.find(x => x.id === tId);
+        const selPlayer = document.getElementById('eventPlayerSel');
+        
+        if (team.players.length === 0) {
+            selPlayer.innerHTML = '<option value="">Sem jogadores cadastrados</option>';
+        } else {
+            selPlayer.innerHTML = team.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+        }
+    },
+
+    addEvent: (type) => {
+        const t = getCurrent();
+        const m = t.matches.find(x => x.id === app.currentMatchId);
+        
+        const teamId = parseInt(document.getElementById('eventTeamSel').value);
+        const playerId = parseInt(document.getElementById('eventPlayerSel').value);
+        const team = t.teams.find(x => x.id === teamId);
+        const player = team.players.find(x => x.id === playerId);
+        
+        const playerName = player ? player.name : "Desconhecido"; // Caso não tenha jogador selecionado
+
+        // Adiciona evento
+        m.events.push({
+            type: type, // 'goal', 'yellow', 'red'
+            teamId: teamId,
+            playerId: playerId || null,
+            playerName: playerName,
+            time: new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})
+        });
+
+        // Atualiza Placar se for GOL
+        if (type === 'goal') {
+            if (teamId === m.teamA) m.scoreA++;
+            else m.scoreB++;
+        }
+
+        app.save();
+        ui.renderMatchStats(m); // Atualiza modal em tempo real
+    },
+
+    removeEvent: (idx) => {
+        if(state.isReadOnly) return;
+        const t = getCurrent();
+        const m = t.matches.find(x => x.id === app.currentMatchId);
+        const evt = m.events[idx];
+
+        // Se remover GOL, decrementa placar
+        if(evt.type === 'goal') {
+            if(evt.teamId === m.teamA) m.scoreA--;
+            else m.scoreB--;
+        }
+
+        m.events.splice(idx, 1);
+        app.save();
+        ui.renderMatchStats(m);
+    },
+
+    finishMatch: () => {
+        const t = getCurrent();
+        const m = t.matches.find(x => x.id === app.currentMatchId);
+        m.ended = true;
+        app.save();
+        ui.closeModal('modal-match');
+        app.renderMatches();
+        app.renderStandings(); // Atualiza tabela
+        app.renderStats(); // Atualiza artilharia
+    },
+
+    // 4. MATA-MATA (Simples)
+    generateKnockout: (n) => {
+        if(state.isReadOnly) return;
+        const t = getCurrent();
+        const std = logic.getStandings(t);
+        if(std.length < n) return alert("Times insuficientes");
+        
+        t.knockout = [];
+        for(let i=0; i<n/2; i++) {
+            t.knockout.push({
+                round: n===4?'Semi':'Quartas',
+                tA: std[i].id, tB: std[n-1-i].id
+            });
+        }
+        app.save();
+        app.renderKnockout();
+    },
+
+    // 5. RENDERIZAÇÃO
+    renderAll: () => {
+        const t = getCurrent();
+        document.getElementById('displayTourneyName').innerText = t.config.name;
+        document.getElementById('confName').value = t.config.name;
+        document.getElementById('confWin').value = t.config.ptsWin;
+        document.getElementById('confDraw').value = t.config.ptsDraw;
+
+        app.renderTeams();
+        app.renderMatches();
+        app.renderStandings();
+        app.renderKnockout();
+        app.renderStats();
+    },
+
+    renderTeams: () => {
+        const t = getCurrent();
+        document.getElementById('teams-list').innerHTML = t.teams.map(tm => `
+            <div class="card">
+                <div style="display:flex; align-items:center; margin-bottom:10px;">
+                    ${tm.logo ? `<img src="${tm.logo}" class="team-logo">` : ''} 
+                    <b>${tm.name}</b>
+                </div>
+                <small>${tm.players.length} jogadores</small>
+                <button class="btn-secondary full admin-only" onclick="app.openSquadModal(${tm.id})">Gerenciar Elenco</button>
+            </div>
+        `).join('');
     },
 
     renderMatches: () => {
-        const list = document.getElementById('matches-list');
-        list.innerHTML = currentData.matches.map(m => {
-            const tA = currentData.teams.find(x => x.id === m.teamA);
-            const tB = currentData.teams.find(x => x.id === m.teamB);
-            if (!tA || !tB) return '';
-
-            const gA = m.events.filter(e => e.type === 'goal' && e.teamId == m.teamA).length;
-            const gB = m.events.filter(e => e.type === 'goal' && e.teamId == m.teamB).length;
-
+        const t = getCurrent();
+        document.getElementById('matches-list').innerHTML = t.matches.map(m => {
+            const tA = t.teams.find(x => x.id === m.teamA);
+            const tB = t.teams.find(x => x.id === m.teamB);
             return `
-            <div class="match-card">
-                <div style="flex:1; text-align:right"><b>${tA.name}</b></div>
-                <div class="match-score-badge">${m.ended ? `${gA} x ${gB}` : 'VS'}</div>
-                <div style="flex:1; text-align:left"><b>${tB.name}</b></div>
-                <button class="btn-secondary" onclick="app.openMatch(${m.id})">Súmula</button>
+            <div class="match-card" onclick="app.openMatchModal(${m.id})" style="${m.ended?'opacity:0.7':''}">
+                <span>${tA.name}</span>
+                <span class="score-badge">${m.ended ? `${m.scoreA}-${m.scoreB}` : 'vs'}</span>
+                <span>${tB.name}</span>
             </div>`;
         }).join('');
     },
 
-    openMatch: (mid) => {
-        app.tempMatchId = mid;
-        const m = currentData.matches.find(x => x.id === mid);
-        const tA = currentData.teams.find(x => x.id === m.teamA);
-        const tB = currentData.teams.find(x => x.id === m.teamB);
-
-        document.getElementById('mTeamA').innerText = tA.name;
-        document.getElementById('mTeamB').innerText = tB.name;
-
-        const selT = document.getElementById('evtTeam');
-        selT.innerHTML = `<option value="">Escolha...</option>
-                          <option value="${tA.id}">${tA.name}</option>
-                          <option value="${tB.id}">${tB.name}</option>`;
-        
-        document.getElementById('evtPlayer').innerHTML = '<option value="">Jogador...</option>';
-        app.updateScoreUI();
-        ui.openModal('modal-match');
-    },
-
-    loadPlayersForEvent: () => {
-        const tid = document.getElementById('evtTeam').value;
-        if (!tid) return;
-        const t = currentData.teams.find(x => x.id == tid);
-        document.getElementById('evtPlayer').innerHTML = t.players.map(p => 
-            `<option value="${p.id}">${p.number} - ${p.name}</option>`
-        ).join('');
-    },
-
-    addEvent: () => {
-        const tid = document.getElementById('evtTeam').value;
-        const pid = document.getElementById('evtPlayer').value;
-        const type = document.getElementById('evtType').value;
-        const time = document.getElementById('evtTime').value;
-
-        if (!tid || !pid || !time) return alert("Preencha o lance completo!");
-        
-        const m = currentData.matches.find(x => x.id === app.tempMatchId);
-        const t = currentData.teams.find(x => x.id == tid);
-        const p = t.players.find(x => x.id == pid);
-
-        m.events.push({ teamId: tid, playerId: pid, pName: p.name, type: type, time: Number(time) });
-        m.events.sort((a,b) => a.time - b.time);
-        
-        saveData();
-        app.updateScoreUI();
-    },
-
-    updateScoreUI: () => {
-        const m = currentData.matches.find(x => x.id === app.tempMatchId);
-        const gA = m.events.filter(e => e.type === 'goal' && e.teamId == m.teamA).length;
-        const gB = m.events.filter(e => e.type === 'goal' && e.teamId == m.teamB).length;
-        
-        document.getElementById('scoreA').innerText = gA;
-        document.getElementById('scoreB').innerText = gB;
-
-        document.getElementById('match-log').innerHTML = m.events.map(e => {
-            const icon = e.type === 'goal' ? '⚽' : (e.type === 'yellow' ? '🟨' : '🟥');
-            return `<li>${e.time}' ${icon} ${e.pName}</li>`;
-        }).join('');
-    },
-
-    finishMatch: () => {
-        const m = currentData.matches.find(x => x.id === app.tempMatchId);
-        m.ended = true;
-        saveData();
-        ui.closeModal('modal-match');
-    },
-
     renderStandings: () => {
-        let st = {};
-        currentData.teams.forEach(t => st[t.id] = { name:t.name, P:0, J:0, V:0, E:0, D:0, GP:0, GC:0, SG:0 });
-        const c = currentData.config;
-
-        currentData.matches.forEach(m => {
-            if (m.ended) {
-                const gA = m.events.filter(e => e.type === 'goal' && e.teamId == m.teamA).length;
-                const gB = m.events.filter(e => e.type === 'goal' && e.teamId == m.teamB).length;
-                
-                const sA = st[m.teamA]; const sB = st[m.teamB];
-                if (!sA || !sB) return;
-
-                sA.J++; sB.J++;
-                sA.GP += gA; sA.GC += gB; sA.SG = sA.GP - sA.GC;
-                sB.GP += gB; sB.GC += gA; sB.SG = sB.GP - sB.GC;
-
-                if (gA > gB) { sA.V++; sA.P += c.ptsWin; sB.D++; sB.P += c.ptsLoss; }
-                else if (gB > gA) { sB.V++; sB.P += c.ptsWin; sA.D++; sA.P += c.ptsLoss; }
-                else { sA.E++; sB.E++; sA.P += c.ptsDraw; sB.P += c.ptsDraw; }
-            }
-        });
-
-        const sorted = Object.values(st).sort((a,b) => b.P - a.P || b.V - a.V || b.SG - a.SG);
-        document.getElementById('standings-body').innerHTML = sorted.map((t,i) => `
-            <tr><td>${i+1}</td><td style="text-align:left">${t.name}</td><td><b>${t.P}</b></td><td>${t.J}</td><td>${t.V}</td><td>${t.E}</td><td>${t.D}</td><td>${t.GP}</td><td>${t.GC}</td><td>${t.SG}</td></tr>
+        const std = logic.getStandings(getCurrent());
+        document.getElementById('standings-body').innerHTML = std.map((s,i) => `
+            <tr>
+                <td>${i+1}</td>
+                <td style="text-align:left">${s.name}</td>
+                <td><strong>${s.P}</strong></td>
+                <td>${s.J}</td>
+                <td>${s.V}</td>
+                <td>${s.E}</td>
+                <td>${s.D}</td>
+                <td>${s.SG}</td>
+            </tr>
         `).join('');
     },
 
-    renderStats: () => {
-        let players = {};
-        currentData.matches.forEach(m => {
-            m.events.forEach(e => {
-                if (!players[e.playerId]) players[e.playerId] = { name: e.pName, goal:0, yellow:0, red:0 };
-                if (e.type === 'goal') players[e.playerId].goal++;
-                if (e.type === 'yellow') players[e.playerId].yellow++;
-                if (e.type === 'red') players[e.playerId].red++;
-            });
-        });
+    renderKnockout: () => {
+        const t = getCurrent();
+        const div = document.getElementById('knockout-area');
+        if(!t.knockout || !t.knockout.length) { div.innerHTML='Vazio'; return; }
+        div.innerHTML = t.knockout.map(k => {
+            const A = t.teams.find(x=>x.id===k.tA);
+            const B = t.teams.find(x=>x.id===k.tB);
+            return `<div class="card" style="min-width:150px; text-align:center"><small>${k.round}</small><br><b>${A.name}</b><br>vs<br><b>${B.name}</b></div>`
+        }).join('');
+    },
 
-        const render = (prop, elId) => {
-            const arr = Object.values(players).filter(p => p[prop] > 0).sort((a,b) => b[prop] - a[prop]).slice(0,5);
-            document.getElementById(elId).innerHTML = arr.map(p => `<li><span>${p.name}</span> <b>${p[prop]}</b></li>`).join('');
-        };
-        render('goal', 'stats-goals');
-        render('red', 'stats-reds');
-        render('yellow', 'stats-yellows');
+    renderStats: () => {
+        const stats = logic.getPlayerStats(getCurrent());
+        
+        // Artilharia
+        const scorers = stats.filter(p => p.goals > 0).sort((a,b) => b.goals - a.goals);
+        document.getElementById('stats-scorers').innerHTML = scorers.map(p => `
+            <tr><td>${p.name}</td><td>${p.team}</td><td><strong>${p.goals}</strong></td></tr>
+        `).join('');
+
+        // Cartões
+        const cards = stats.filter(p => p.yellow > 0 || p.red > 0).sort((a,b) => b.red - a.red || b.yellow - a.yellow);
+        document.getElementById('stats-cards').innerHTML = cards.map(p => `
+            <li style="padding:5px; border-bottom:1px solid #eee; display:flex; justify-content:space-between;">
+                <span>${p.name} <small>(${p.team})</small></span>
+                <span>
+                    ${p.yellow ? `<span style="color:#f1c40f">■</span>${p.yellow}` : ''} 
+                    ${p.red ? `<span style="color:#c0392b">■</span>${p.red}` : ''}
+                </span>
+            </li>
+        `).join('');
+    },
+
+    showTab: (id) => {
+        document.querySelectorAll('.tab-content').forEach(e => e.classList.add('hidden'));
+        document.querySelectorAll('.nav-links li').forEach(e => e.classList.remove('active'));
+        document.getElementById(`tab-${id}`).classList.remove('hidden');
+        document.getElementById(`link-${id}`).classList.add('active');
+    },
+
+    save: async () => {
+        if(state.isReadOnly) return;
+        await _supabase.from('usuarios').update({ data_tourneys: state.allTourneys }).eq('username', state.user);
+    },
+    shareLink: () => {
+        prompt("Link Público:", `${location.origin}${location.pathname}?u=${state.user}&id=${getCurrent().id}`);
     }
 };
 
+// --- LOGIC ---
+const logic = {
+    getStandings: (t) => {
+        let map = {};
+        t.teams.forEach(team => {
+            map[team.id] = { id: team.id, name: team.name, P:0, J:0, V:0, E:0, D:0, GP:0, GC:0, SG:0 };
+        });
+        t.matches.filter(m => m.ended).forEach(m => {
+            const A = map[m.teamA], B = map[m.teamB];
+            A.J++; B.J++;
+            A.GP+=m.scoreA; A.GC+=m.scoreB; A.SG = A.GP-A.GC;
+            B.GP+=m.scoreB; B.GC+=m.scoreA; B.SG = B.GP-B.GC;
+            if(m.scoreA > m.scoreB) { A.V++; A.P += t.config.ptsWin; B.D++; }
+            else if(m.scoreB > m.scoreA) { B.V++; B.P += t.config.ptsWin; A.D++; }
+            else { A.E++; B.E++; A.P += t.config.ptsDraw; B.P += t.config.ptsDraw; }
+        });
+        return Object.values(map).sort((a,b) => b.P - a.P || b.SG - a.SG);
+    },
+    
+    getPlayerStats: (t) => {
+        let players = {}; // id -> {name, team, goals, yellow, red}
+        
+        t.matches.forEach(m => {
+            if(!m.events) return;
+            m.events.forEach(evt => {
+                if(!evt.playerId) return; // ignora eventos sem jogador
+                const pid = evt.playerId;
+                
+                if(!players[pid]) {
+                    // Busca nome do time
+                    const tm = t.teams.find(x => x.id === evt.teamId);
+                    players[pid] = { name: evt.playerName, team: tm ? tm.name : '-', goals:0, yellow:0, red:0 };
+                }
+                
+                if(evt.type === 'goal') players[pid].goals++;
+                if(evt.type === 'yellow') players[pid].yellow++;
+                if(evt.type === 'red') players[pid].red++;
+            });
+        });
+        return Object.values(players);
+    }
+};
+
+// --- UI HELPERS ---
 const ui = {
     openModal: (id) => document.getElementById(id).style.display = 'flex',
-    closeModal: (id) => document.getElementById(id).style.display = 'none'
+    closeModal: (id) => document.getElementById(id).style.display = 'none',
+    hideAll: () => {
+        ['landing-page','tourney-selector','app-dashboard'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    },
+    showSelector: () => {
+        ui.hideAll();
+        document.getElementById('tourney-selector').classList.remove('hidden');
+        ui.renderTourneyList();
+    },
+    showDashboard: () => {
+        ui.hideAll();
+        document.getElementById('app-dashboard').classList.remove('hidden');
+    },
+    renderTourneyList: () => {
+        document.getElementById('tourney-list').innerHTML = state.allTourneys.map((t,i) => `
+            <div class="card">
+                <h3>${t.config.name}</h3>
+                <button class="btn-primary full" onclick="app.loadTourney(${i})">Entrar</button>
+            </div>`).join('');
+    },
+    renderSquadList: (team) => {
+        document.getElementById('squad-list').innerHTML = team.players.map(p => `
+            <li>${p.name} <span style="color:red; cursor:pointer" onclick="app.removePlayer(${p.id})">&times;</span></li>
+        `).join('');
+    },
+    renderMatchStats: (m) => {
+        document.getElementById('displayScoreA').innerText = m.scoreA;
+        document.getElementById('displayScoreB').innerText = m.scoreB;
+        
+        // Render Timeline
+        const timeline = document.getElementById('match-timeline');
+        if (!m.events || m.events.length === 0) {
+            timeline.innerHTML = '<small style="color:#999">Nenhum evento registrado.</small>';
+            return;
+        }
+
+        timeline.innerHTML = m.events.map((evt, idx) => {
+            let icon = '';
+            let color = '';
+            if(evt.type === 'goal') { icon = 'fa-futbol'; color='#27ae60'; }
+            if(evt.type === 'yellow') { icon = 'fa-square'; color='#f1c40f'; }
+            if(evt.type === 'red') { icon = 'fa-square'; color='#c0392b'; }
+
+            return `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid #eee">
+                <div>
+                    <i class="fas ${icon}" style="color:${color}; margin-right:5px;"></i>
+                    <strong>${evt.playerName}</strong> 
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <small>${evt.time}</small>
+                    ${!state.isReadOnly ? `<i class="fas fa-trash" style="color:red; cursor:pointer" onclick="app.removeEvent(${idx})"></i>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+    },
+    preparePublic: () => {
+        document.querySelectorAll('.admin-only').forEach(e => e.remove());
+        document.getElementById('public-msg').classList.remove('hidden');
+    }
 };
+
+function getCurrent() { return state.allTourneys[state.currentIdx]; }
