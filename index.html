@@ -4,361 +4,252 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ArenaFut - Gestor de Campeonatos</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
-
-
     <div id="landing-page" class="landing-container">
-
         <div class="auth-wrapper">
-
-            <div class="auth-box">
-
-                <h2 style="text-align:center"><i class="fas fa-futbol"></i> ArenaFut Pro</h2>
-
+            <div class="auth-box card">
+                <div class="auth-header">
+                    <h2><i class="fas fa-futbol"></i> ArenaFut Pro</h2>
+                    <p>Faça login ou crie sua conta</p>
+                </div>
                 <form id="loginForm">
-
-                    <label>Usuário</label><input type="text" id="usernameInput" required>
-
-                    <label>Senha</label><input type="password" id="passwordInput" required>
-
-                    <button type="submit" class="btn-primary full">Entrar</button>
-
+                    <div class="form-group">
+                        <label>Usuário</label>
+                        <input type="text" id="usernameInput" class="form-control" required placeholder="Seu nome de usuário">
+                    </div>
+                    <div class="form-group">
+                        <label>Senha</label>
+                        <input type="password" id="passwordInput" class="form-control" required placeholder="Sua senha">
+                    </div>
+                    <button type="submit" class="btn btn-primary full-width">Entrar</button>
                 </form>
-
             </div>
-
         </div>
-
     </div>
 
-
-
-    <div id="tourney-selector" class="app-container hidden" style="padding: 2rem;">
-
-        <div class="header-flex">
-
-            <h2>Meus Campeonatos</h2>
-
-            <button class="btn-primary" onclick="ui.openModal('modal-new-tourney')">+ Novo</button>
-
+    <div id="tourney-selector" class="app-container hidden">
+        <div class="content wrapper-center">
+            <div class="header-flex mb-20">
+                <h2>Meus Campeonatos</h2>
+                <button class="btn btn-primary" onclick="ui.openModal('modal-new-tourney')"><i class="fas fa-plus"></i> Novo</button>
+            </div>
+            <div id="tourney-list" class="grid-container"></div>
+            <div class="footer-actions mt-20">
+                <button class="btn btn-danger" onclick="auth.logout()">Sair da Conta</button>
+            </div>
         </div>
-
-        <div id="tourney-list" class="grid-container"></div>
-
-        <button class="btn-logout" onclick="auth.logout()" style="margin-top:20px; width:auto;">Sair</button>
-
     </div>
-
-
 
     <div id="app-dashboard" class="app-container hidden">
-
         <nav class="sidebar">
-
             <div class="sidebar-header">
-
                 <div class="logo"><i class="fas fa-trophy"></i> Arena<span>Fut</span></div>
-
                 <div class="user-info">
-
-                    <small id="displayTourneyName">...</small>
-
+                    <small id="displayTourneyName" class="badge">...</small>
                 </div>
-
             </div>
-
             <ul class="nav-links">
-
-                <li onclick="app.showTab('config')" id="link-config" class="active"><i class="fas fa-cog"></i> Config</li>
-
-                <li onclick="app.showTab('teams')" id="link-teams"><i class="fas fa-users"></i> Times</li>
-
-                <li onclick="app.showTab('matches')" id="link-matches"><i class="fas fa-calendar-alt"></i> Jogos</li>
-
-                <li onclick="app.showTab('standings')" id="link-standings"><i class="fas fa-list-ol"></i> Tabela</li>
-
-                <li onclick="app.showTab('knockout')" id="link-knockout"><i class="fas fa-sitemap"></i> Mata-Mata</li>
-
-                <li onclick="app.showTab('stats')" id="link-stats"><i class="fas fa-chart-line"></i> Estatísticas</li>
-
+                <li onclick="app.showTab('config')" id="link-config" class="active"><i class="fas fa-cog"></i> <span>Config</span></li>
+                <li onclick="app.showTab('teams')" id="link-teams"><i class="fas fa-users"></i> <span>Times</span></li>
+                <li onclick="app.showTab('matches')" id="link-matches"><i class="fas fa-calendar-alt"></i> <span>Jogos</span></li>
+                <li onclick="app.showTab('standings')" id="link-standings"><i class="fas fa-list-ol"></i> <span>Tabela</span></li>
+                <li onclick="app.showTab('knockout')" id="link-knockout"><i class="fas fa-sitemap"></i> <span>Mata-Mata</span></li>
+                <li onclick="app.showTab('stats')" id="link-stats"><i class="fas fa-chart-line"></i> <span>Estatísticas</span></li>
             </ul>
-
             <div class="sidebar-footer">
-
-                <button class="btn-secondary full admin-only" onclick="app.shareLink()">Compartilhar</button>
-
-                <button class="btn-logout full" onclick="app.exitTourney()">Voltar</button>
-
+                <button class="btn btn-secondary full-width admin-only mb-10" onclick="app.shareLink()"><i class="fas fa-share-alt"></i> Compartilhar</button>
+                <button class="btn btn-danger full-width" onclick="app.exitTourney()"><i class="fas fa-arrow-left"></i> Voltar</button>
             </div>
-
         </nav>
 
-
-
         <main class="content">
-
             <section id="tab-config" class="tab-content active">
-
-                <h2>Configurações</h2>
-
-                <div class="card admin-only">
-
-                    <label>Nome</label><input type="text" id="confName">
-
-                    <div class="grid-3">
-
-                        <div><label>Vitoria</label><input type="number" id="confWin"></div>
-
-                        <div><label>Empate</label><input type="number" id="confDraw"></div>
-
-                    </div>
-
-                    <button class="btn-primary" onclick="app.saveConfig()">Salvar</button>
-
+                <div class="header-flex mb-20">
+                    <h2>Configurações</h2>
                 </div>
-
-                <div id="public-msg" class="card hidden">Modo Visualizador (Somente Leitura)</div>
-
+                <div class="card admin-only">
+                    <div class="form-group">
+                        <label>Nome do Campeonato</label>
+                        <input type="text" id="confName" class="form-control">
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>Pontos por Vitória</label>
+                            <input type="number" id="confWin" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Pontos por Empate</label>
+                            <input type="number" id="confDraw" class="form-control">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary mt-10" onclick="app.saveConfig()">Salvar Configurações</button>
+                </div>
+                <div id="public-msg" class="card info-card hidden">
+                    <i class="fas fa-eye"></i> <strong>Modo Visualizador:</strong> Você está visualizando este campeonato em modo somente leitura.
+                </div>
             </section>
-
-
 
             <section id="tab-teams" class="tab-content hidden">
-
-                <div class="header-flex">
-
-                    <h2>Times</h2>
-
-                    <button class="btn-primary admin-only" onclick="ui.openModal('modal-team')">+ Time</button>
-
+                <div class="header-flex mb-20">
+                    <h2>Times Participantes</h2>
+                    <button class="btn btn-primary admin-only" onclick="ui.openModal('modal-team')"><i class="fas fa-plus"></i> Novo Time</button>
                 </div>
-
                 <div id="teams-list" class="grid-container"></div>
-
             </section>
-
-
 
             <section id="tab-matches" class="tab-content hidden">
-
-                <div class="header-flex">
-
-                    <h2>Jogos</h2>
-
-                    <button class="btn-secondary admin-only" onclick="app.generateFixture()">Gerar Tabela</button>
-
+                <div class="header-flex mb-20">
+                    <h2>Tabela de Jogos</h2>
+                    <button class="btn btn-secondary admin-only" onclick="app.generateFixture()"><i class="fas fa-sync-alt"></i> Gerar Tabela</button>
                 </div>
-
-                <div id="matches-list"></div>
-
+                <div id="matches-list" class="grid-container"></div>
             </section>
-
-
 
             <section id="tab-standings" class="tab-content hidden">
-
-                <h2>Classificação</h2>
-
-                <div class="table-responsive">
-
-                    <table class="standings-table">
-
-                        <thead><tr><th>#</th><th>Time</th><th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th></tr></thead>
-
-                        <tbody id="standings-body"></tbody>
-
-                    </table>
-
+                <div class="header-flex mb-20">
+                    <h2>Classificação Geral</h2>
                 </div>
-
+                <div class="card table-responsive">
+                    <table class="data-table">
+                        <thead><tr><th>#</th><th>Time</th><th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th></tr></thead>
+                        <tbody id="standings-body"></tbody>
+                    </table>
+                </div>
             </section>
-
-
 
             <section id="tab-knockout" class="tab-content hidden">
-
-                <div class="header-flex">
-
-                    <h2>Mata-Mata</h2>
-
+                <div class="header-flex mb-20">
+                    <h2>Fase Final (Mata-Mata)</h2>
                     <div class="admin-only">
-
-                        <button class="btn-secondary" onclick="app.generateKnockout(4)">Semis (Top 4)</button>
-
+                        <button class="btn btn-secondary" onclick="app.generateKnockout(4)">Gerar Semifinais (Top 4)</button>
                     </div>
-
                 </div>
-
-                <div id="knockout-area" class="bracket-container"></div>
-
+                <div class="card">
+                    <div id="knockout-area" class="bracket-container"></div>
+                </div>
             </section>
-
-
 
             <section id="tab-stats" class="tab-content hidden">
-
-                <h2>Estatísticas</h2>
-
-                <div class="grid-container">
-
-                    <div class="card" style="grid-column: span 2;">
-
-                        <h3><i class="fas fa-futbol"></i> Artilharia</h3>
-
-                        <table class="standings-table">
-
-                            <thead><tr><th>Jogador</th><th>Time</th><th>Gols</th></tr></thead>
-
-                            <tbody id="stats-scorers"></tbody>
-
-                        </table>
-
-                    </div>
-
-                    <div class="card">
-
-                        <h3><i class="fas fa-square" style="color:#e74c3c"></i> Ranking de Cartões</h3>
-
-                        <ul id="stats-cards" style="list-style:none; padding:0;"></ul>
-
-                    </div>
-
+                <div class="header-flex mb-20">
+                    <h2>Estatísticas</h2>
                 </div>
-
+                <div class="grid-2">
+                    <div class="card">
+                        <h3 class="card-title"><i class="fas fa-futbol text-success"></i> Artilharia</h3>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead><tr><th>Jogador</th><th>Time</th><th>Gols</th></tr></thead>
+                                <tbody id="stats-scorers"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 class="card-title"><i class="fas fa-clone text-danger"></i> Ranking de Cartões</h3>
+                        <ul id="stats-cards" class="list-group"></ul>
+                    </div>
+                </div>
             </section>
-
         </main>
-
     </div>
-
-
 
     <div id="modal-new-tourney" class="modal">
-
         <div class="modal-content">
-
-            <h3>Novo Campeonato</h3>
-
-            <input type="text" id="newTourneyName" placeholder="Nome">
-
-            <button class="btn-primary full" onclick="app.createTourney()">Criar</button>
-
-            <button class="btn-secondary full" onclick="ui.closeModal('modal-new-tourney')">Cancelar</button>
-
+            <div class="modal-header">
+                <h3>Criar Novo Campeonato</h3>
+                <span class="close" onclick="ui.closeModal('modal-new-tourney')">&times;</span>
+            </div>
+            <div class="form-group mt-10">
+                <label>Nome do Campeonato</label>
+                <input type="text" id="newTourneyName" class="form-control" placeholder="Ex: Brasileirão 2026">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="ui.closeModal('modal-new-tourney')">Cancelar</button>
+                <button class="btn btn-primary" onclick="app.createTourney()">Criar Campeonato</button>
+            </div>
         </div>
-
     </div>
-
-
 
     <div id="modal-team" class="modal">
-
         <div class="modal-content">
-
-            <span class="close" onclick="ui.closeModal('modal-team')">&times;</span>
-
-            <h3>Novo Time</h3>
-
-            <input type="text" id="teamNameInput" placeholder="Nome do Time">
-
-            <input type="text" id="teamLogoInput" placeholder="URL do Escudo">
-
-            <button class="btn-primary full" onclick="app.addTeam()">Salvar</button>
-
+            <div class="modal-header">
+                <h3>Cadastrar Time</h3>
+                <span class="close" onclick="ui.closeModal('modal-team')">&times;</span>
+            </div>
+            <div class="form-group mt-10">
+                <label>Nome do Time</label>
+                <input type="text" id="teamNameInput" class="form-control" placeholder="Ex: Flamengo">
+            </div>
+            <div class="form-group">
+                <label>URL do Escudo (Opcional)</label>
+                <input type="text" id="teamLogoInput" class="form-control" placeholder="https://link-da-imagem.com/logo.png">
+            </div>
+            <button class="btn btn-primary full-width mt-10" onclick="app.addTeam()">Salvar Time</button>
         </div>
-
     </div>
-
-
 
     <div id="modal-squad" class="modal">
-
         <div class="modal-content">
-
-            <span class="close" onclick="ui.closeModal('modal-squad')">&times;</span>
-
-            <h3 id="squadTitle">Gerenciar Elenco</h3>
-
-            <div class="input-group">
-
-                <input type="text" id="playerNameInput" placeholder="Nome do Jogador">
-
-                <button class="btn-primary" onclick="app.addPlayerToSquad()">Add</button>
-
+            <div class="modal-header">
+                <h3 id="squadTitle">Gerenciar Elenco</h3>
+                <span class="close" onclick="ui.closeModal('modal-squad')">&times;</span>
             </div>
-
-            <ul id="squad-list" style="max-height: 200px; overflow-y: auto; list-style: none; margin-top:10px;"></ul>
-
+            <div class="input-group mt-10">
+                <input type="text" id="playerNameInput" class="form-control" placeholder="Nome do Jogador">
+                <button class="btn btn-primary" onclick="app.addPlayerToSquad()">Adicionar</button>
+            </div>
+            <ul id="squad-list" class="list-group mt-20 scrollable-list"></ul>
         </div>
-
     </div>
-
-
 
     <div id="modal-match" class="modal">
-
-        <div class="modal-content" style="max-width: 600px;">
-
-            <span class="close" onclick="ui.closeModal('modal-match')">&times;</span>
-
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3>Súmula da Partida</h3>
+                <span class="close" onclick="ui.closeModal('modal-match')">&times;</span>
+            </div>
             
-
-            <div class="match-score-display" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-
-                <div class="team-box" style="text-align:center">
-
-                    <h3 id="mTeamA">Time A</h3>
-
-                    <h1 id="displayScoreA" style="font-size:3rem">0</h1>
-
+            <div class="match-score-display mt-20">
+                <div class="team-box">
+                    <h3 id="mTeamA" class="team-name">Time A</h3>
+                    <div id="displayScoreA" class="score-number">0</div>
                 </div>
-
-                <div style="font-weight:bold; color:#888">X</div>
-
-                <div class="team-box" style="text-align:center">
-
-                    <h1 id="displayScoreB" style="font-size:3rem">0</h1>
-
-                    <h3 id="mTeamB">Time B</h3>
-
-                </div>
-
-            </div>
-
-
-
-            <div class="admin-only" style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px;">
-
-                <h4>Adicionar Evento na Súmula</h4>
-
-                <div style="display:flex; gap:10px;">
-
-                    <select id="eventTeamSel" onchange="app.updatePlayerSelect()" style="flex:1"></select>
-
-                    <select id="eventPlayerSel" style="flex:1"><option>Selecione Jogador</option></select>
-
-                </div>
-
-                <div style="display:flex; gap:10px; margin-top:10px;">
-
-                    <button class="btn-primary" style="flex:1; background:#27ae60" onclick="app.addEvent('goal')"><i class="fas fa-futbol"></i> Gol</button>
-
-                    <button class="btn-primary" style="flex:1; background:#f1c40f; color:black" onclick="app.addEvent('yellow')"><i class="fas fa-square"></i> Amarelo</button>
-
-                    <button class="btn-primary" style="flex:1; background:#c0392b" onclick="app.addEvent('red')"><i class="fas fa-square"></i> Vermelho</button>
+                <div class="score-divider">X</div>
+                <div class="team-box">
+                    <div id="displayScoreB" class="score-number">0</div>
+                    <h3 id="mTeamB" class="team-name">Time B</h3>
                 </div>
             </div>
 
-            <h4>Resumo da Partida</h4>
-            <div id="match-timeline" style="max-height:150px; overflow-y:auto; border:1px solid #eee; padding:10px;"></div>
-            <button class="btn-logout full admin-only" style="margin-top:20px;" onclick="app.finishMatch()">Encerrar Partida</button>
+            <div class="admin-only event-manager mt-20">
+                <h4 class="mb-10">Registrar Evento</h4>
+                <div class="grid-2 gap-10">
+                    <select id="eventTeamSel" class="form-control" onchange="app.updatePlayerSelect()"></select>
+                    <select id="eventPlayerSel" class="form-control"><option>Selecione o Jogador</option></select>
+                </div>
+                <div class="action-buttons grid-3 gap-10 mt-10">
+                    <button class="btn btn-success" onclick="app.addEvent('goal')"><i class="fas fa-futbol"></i> Gol</button>
+                    <button class="btn btn-warning" onclick="app.addEvent('yellow')"><i class="fas fa-square"></i> Amarelo</button>
+                    <button class="btn btn-danger" onclick="app.addEvent('red')"><i class="fas fa-square"></i> Vermelho</button>
+                </div>
+            </div>
+
+            <div class="mt-20">
+                <h4 class="mb-10">Linha do Tempo</h4>
+                <div id="match-timeline" class="timeline-container scrollable-list"></div>
+            </div>
+            
+            <button class="btn btn-dark full-width admin-only mt-20" onclick="app.finishMatch()">Encerrar Partida</button>
         </div>
     </div>
+
     <script src="script.js"></script>
 </body>
 </html>
