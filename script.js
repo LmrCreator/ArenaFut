@@ -37,21 +37,35 @@ const auth = {
         });
     },
     handleLogin: async () => {
-        const u = document.getElementById('usernameInput').value;
-        const p = document.getElementById('passwordInput').value;
+        const u = document.getElementById('usernameInput').value.trim();
+        const p = document.getElementById('passwordInput').value.trim();
+        if (!u || !p) return;
+        
+        const btn = document.querySelector('#loginForm button');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Carregando...';
+        btn.disabled = true;
+
         if (!await auth.login(u, p)) {
-            if(confirm("Criar nova conta?")) auth.register(u, p);
+            if(confirm("Usuário não encontrado ou senha incorreta. Deseja criar uma nova conta com estes dados?")) {
+                await auth.register(u, p);
+            } else {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
         }
     },
     login: async (u, p) => {
-        const { data } = await _supabase.from('usuarios').select('*').eq('username', u).maybeSingle();
-        if (data && data.password === p) {
-            state.user = u;
-            state.allTourneys = data.data_tourneys || [];
-            localStorage.setItem(SESSION_KEY, `${u}|${p}`);
-            ui.showSelector();
-            return true;
-        }
+        try {
+            const { data, error } = await _supabase.from('usuarios').select('*').eq('username', u).maybeSingle();
+            if (data && data.password === p) {
+                state.user = u;
+                state.allTourneys = data.data_tourneys || [];
+                localStorage.setItem(SESSION_KEY, `${u}|${p}`);
+                ui.showSelector();
+                return true;
+            }
+        } catch(e) { console.error(e); }
         return false;
     },
     register: async (u, p) => {
@@ -72,6 +86,8 @@ const auth = {
                 state.currentIdx = 0;
                 ui.preparePublic();
                 app.loadTourney(0);
+            } else {
+                alert("Campeonato não encontrado.");
             }
         }
     }
@@ -79,10 +95,9 @@ const auth = {
 
 // --- APP CORE ---
 const app = {
-    // 1. CAMPEONATOS
     createTourney: () => {
-        const name = document.getElementById('newTourneyName').value;
-        if(!name) return;
+        const name = document.getElementById('newTourneyName').value.trim();
+        if(!name) return alert("Digite um nome para o campeonato!");
         state.allTourneys.push({
             id: Date.now(),
             config: { name, ptsWin: 3, ptsDraw: 1 },
@@ -92,6 +107,7 @@ const app = {
         });
         app.save();
         ui.closeModal('modal-new-tourney');
+        document.getElementById('newTourneyName').value = '';
         ui.renderTourneyList();
     },
     loadTourney: (idx) => {
@@ -107,26 +123,27 @@ const app = {
         if(state.isReadOnly) return;
         const t = getCurrent();
         t.config.name = document.getElementById('confName').value;
-        t.config.ptsWin = parseInt(document.getElementById('confWin').value);
-        t.config.ptsDraw = parseInt(document.getElementById('confDraw').value);
+        t.config.ptsWin = parseInt(document.getElementById('confWin').value) || 3;
+        t.config.ptsDraw = parseInt(document.getElementById('confDraw').value) || 1;
         app.save();
         app.renderAll();
+        alert("Configurações salvas com sucesso!");
     },
 
-    // 2. TIMES & ELENCO
     addTeam: () => {
         if(state.isReadOnly) return;
-        const name = document.getElementById('teamNameInput').value;
-        const logo = document.getElementById('teamLogoInput').value;
-        if(!name) return;
-        getCurrent().teams.push({ id: Date.now(), name, logo, players: [] }); // Players array init
+        const name = document.getElementById('teamNameInput').value.trim();
+        const logo = document.getElementById('teamLogoInput').value.trim();
+        if(!name) return alert("O nome do time é obrigatório!");
+        
+        getCurrent().teams.push({ id: Date.now(), name, logo, players: [] });
         document.getElementById('teamNameInput').value = '';
+        document.getElementById('teamLogoInput').value = '';
         ui.closeModal('modal-team');
         app.save();
         app.renderTeams();
     },
     
-    // Abrir modal de Elenco
     currentTeamId: null,
     openSquadModal: (teamId) => {
         if(state.isReadOnly) return;
@@ -138,7 +155,7 @@ const app = {
     },
 
     addPlayerToSquad: () => {
-        const name = document.getElementById('playerNameInput').value;
+        const name = document.getElementById('playerNameInput').value.trim();
         if(!name) return;
         const team = getCurrent().teams.find(x => x.id === app.currentTeamId);
         team.players.push({ id: Date.now(), name: name });
@@ -154,11 +171,12 @@ const app = {
         ui.renderSquadList(team);
     },
 
-    // 3. JOGOS E SÚMULA
     generateFixture: () => {
         if(state.isReadOnly) return;
         const t = getCurrent();
-        if(!confirm("Gerar tabela apagará jogos existentes. Continuar?")) return;
+        if(t.teams.length < 2) return alert("Adicione pelo menos 2 times para gerar a tabela.");
+        if(t.matches.length > 0 && !confirm("Gerar uma nova tabela apagará todos os jogos e placares atuais. Deseja continuar?")) return;
+        
         t.matches = [];
         for(let i=0; i<t.teams.length; i++) {
             for(let j=i+1; j<t.teams.length; j++) {
@@ -167,13 +185,14 @@ const app = {
                     teamA: t.teams[i].id,
                     teamB: t.teams[j].id,
                     scoreA: 0, scoreB: 0,
-                    events: [], // Array de eventos (Gols, Cartões)
+                    events: [],
                     ended: false
                 });
             }
         }
         app.save();
         app.renderMatches();
+        app.renderStandings();
     },
 
     currentMatchId: null,
@@ -184,21 +203,19 @@ const app = {
         const teamA = t.teams.find(x => x.id === m.teamA);
         const teamB = t.teams.find(x => x.id === m.teamB);
 
-        // UI Text
         document.getElementById('mTeamA').innerText = teamA.name;
         document.getElementById('mTeamB').innerText = teamB.name;
         
-        // Popula Selects de Eventos (apenas se for admin)
         if (!state.isReadOnly) {
             const selTeam = document.getElementById('eventTeamSel');
             selTeam.innerHTML = `
                 <option value="${teamA.id}">${teamA.name}</option>
                 <option value="${teamB.id}">${teamB.name}</option>
             `;
-            app.updatePlayerSelect(); // Popula jogadores do time A inicialmente
+            app.updatePlayerSelect(); 
         }
 
-        ui.renderMatchStats(m); // Mostra placar e timeline
+        ui.renderMatchStats(m); 
         ui.openModal('modal-match');
     },
 
@@ -207,8 +224,8 @@ const app = {
         const team = getCurrent().teams.find(x => x.id === tId);
         const selPlayer = document.getElementById('eventPlayerSel');
         
-        if (team.players.length === 0) {
-            selPlayer.innerHTML = '<option value="">Sem jogadores cadastrados</option>';
+        if (!team || team.players.length === 0) {
+            selPlayer.innerHTML = '<option value="">Sem jogadores (Adicione no Elenco)</option>';
         } else {
             selPlayer.innerHTML = team.players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
         }
@@ -217,31 +234,31 @@ const app = {
     addEvent: (type) => {
         const t = getCurrent();
         const m = t.matches.find(x => x.id === app.currentMatchId);
+        if(m.ended && !confirm("Esta partida já foi encerrada. Deseja adicionar evento mesmo assim?")) return;
         
         const teamId = parseInt(document.getElementById('eventTeamSel').value);
         const playerId = parseInt(document.getElementById('eventPlayerSel').value);
         const team = t.teams.find(x => x.id === teamId);
         const player = team.players.find(x => x.id === playerId);
         
-        const playerName = player ? player.name : "Desconhecido"; // Caso não tenha jogador selecionado
+        const playerName = player ? player.name : "Jogador Desconhecido"; 
 
-        // Adiciona evento
+        if(!m.events) m.events = [];
         m.events.push({
-            type: type, // 'goal', 'yellow', 'red'
+            type: type, 
             teamId: teamId,
             playerId: playerId || null,
             playerName: playerName,
             time: new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})
         });
 
-        // Atualiza Placar se for GOL
         if (type === 'goal') {
             if (teamId === m.teamA) m.scoreA++;
             else m.scoreB++;
         }
 
         app.save();
-        ui.renderMatchStats(m); // Atualiza modal em tempo real
+        ui.renderMatchStats(m); 
     },
 
     removeEvent: (idx) => {
@@ -250,10 +267,9 @@ const app = {
         const m = t.matches.find(x => x.id === app.currentMatchId);
         const evt = m.events[idx];
 
-        // Se remover GOL, decrementa placar
         if(evt.type === 'goal') {
-            if(evt.teamId === m.teamA) m.scoreA--;
-            else m.scoreB--;
+            if(evt.teamId === m.teamA && m.scoreA > 0) m.scoreA--;
+            else if(m.scoreB > 0) m.scoreB--;
         }
 
         m.events.splice(idx, 1);
@@ -268,21 +284,20 @@ const app = {
         app.save();
         ui.closeModal('modal-match');
         app.renderMatches();
-        app.renderStandings(); // Atualiza tabela
-        app.renderStats(); // Atualiza artilharia
+        app.renderStandings(); 
+        app.renderStats(); 
     },
 
-    // 4. MATA-MATA (Simples)
     generateKnockout: (n) => {
         if(state.isReadOnly) return;
         const t = getCurrent();
         const std = logic.getStandings(t);
-        if(std.length < n) return alert("Times insuficientes");
+        if(std.length < n) return alert(`Você precisa de pelo menos ${n} times para gerar esta fase.`);
         
         t.knockout = [];
         for(let i=0; i<n/2; i++) {
             t.knockout.push({
-                round: n===4?'Semi':'Quartas',
+                round: n===4?'Semifinal':'Quartas',
                 tA: std[i].id, tB: std[n-1-i].id
             });
         }
@@ -290,13 +305,13 @@ const app = {
         app.renderKnockout();
     },
 
-    // 5. RENDERIZAÇÃO
+    // --- RENDERIZADORES ---
     renderAll: () => {
         const t = getCurrent();
         document.getElementById('displayTourneyName').innerText = t.config.name;
         document.getElementById('confName').value = t.config.name;
-        document.getElementById('confWin').value = t.config.ptsWin;
-        document.getElementById('confDraw').value = t.config.ptsDraw;
+        document.getElementById('confWin').value = t.config.ptsWin || 3;
+        document.getElementById('confDraw').value = t.config.ptsDraw || 1;
 
         app.renderTeams();
         app.renderMatches();
@@ -307,39 +322,55 @@ const app = {
 
     renderTeams: () => {
         const t = getCurrent();
-        document.getElementById('teams-list').innerHTML = t.teams.map(tm => `
+        const container = document.getElementById('teams-list');
+        if(t.teams.length === 0) {
+            container.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1">Nenhum time cadastrado. Clique em "Novo Time" para começar.</div>`;
+            return;
+        }
+        container.innerHTML = t.teams.map(tm => `
             <div class="card">
-                <div style="display:flex; align-items:center; margin-bottom:10px;">
-                    ${tm.logo ? `<img src="${tm.logo}" class="team-logo">` : ''} 
-                    <b>${tm.name}</b>
+                <div class="team-item">
+                    ${tm.logo ? `<img src="${tm.logo}" class="team-logo">` : `<div class="team-logo"><i class="fas fa-shield-alt"></i></div>`} 
+                    <h3 style="margin:0">${tm.name}</h3>
                 </div>
-                <small>${tm.players.length} jogadores</small>
-                <button class="btn-secondary full admin-only" onclick="app.openSquadModal(${tm.id})">Gerenciar Elenco</button>
+                <p class="mb-10" style="color:var(--text-muted); font-size:13px"><i class="fas fa-users"></i> ${tm.players.length} jogadores cadastrados</p>
+                <button class="btn btn-secondary full-width admin-only" onclick="app.openSquadModal(${tm.id})">Gerenciar Elenco</button>
             </div>
         `).join('');
     },
 
     renderMatches: () => {
         const t = getCurrent();
-        document.getElementById('matches-list').innerHTML = t.matches.map(m => {
+        const container = document.getElementById('matches-list');
+        if(t.matches.length === 0) {
+            container.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1">Nenhum jogo gerado. Clique em "Gerar Tabela" para criar os confrontos.</div>`;
+            return;
+        }
+        container.innerHTML = t.matches.map(m => {
             const tA = t.teams.find(x => x.id === m.teamA);
             const tB = t.teams.find(x => x.id === m.teamB);
+            if(!tA || !tB) return '';
             return `
-            <div class="match-card" onclick="app.openMatchModal(${m.id})" style="${m.ended?'opacity:0.7':''}">
-                <span>${tA.name}</span>
-                <span class="score-badge">${m.ended ? `${m.scoreA}-${m.scoreB}` : 'vs'}</span>
-                <span>${tB.name}</span>
+            <div class="match-card ${m.ended ? 'ended' : ''}" onclick="app.openMatchModal(${m.id})">
+                <span class="team-name-card" style="text-align:right">${tA.name}</span>
+                <span class="score-badge ${!m.ended ? 'vs' : ''}">${m.ended ? `${m.scoreA} - ${m.scoreB}` : 'VS'}</span>
+                <span class="team-name-card" style="text-align:left">${tB.name}</span>
             </div>`;
         }).join('');
     },
 
     renderStandings: () => {
         const std = logic.getStandings(getCurrent());
-        document.getElementById('standings-body').innerHTML = std.map((s,i) => `
+        const tbody = document.getElementById('standings-body');
+        if(std.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" class="empty-state" style="border:none">Tabela vazia.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = std.map((s,i) => `
             <tr>
-                <td>${i+1}</td>
-                <td style="text-align:left">${s.name}</td>
-                <td><strong>${s.P}</strong></td>
+                <td><strong>${i+1}º</strong></td>
+                <td style="text-align:left; font-weight:500;">${s.name}</td>
+                <td><strong style="color:var(--primary)">${s.P}</strong></td>
                 <td>${s.J}</td>
                 <td>${s.V}</td>
                 <td>${s.E}</td>
@@ -352,11 +383,21 @@ const app = {
     renderKnockout: () => {
         const t = getCurrent();
         const div = document.getElementById('knockout-area');
-        if(!t.knockout || !t.knockout.length) { div.innerHTML='Vazio'; return; }
+        if(!t.knockout || !t.knockout.length) { 
+            div.innerHTML='<div class="empty-state" style="width:100%">Fase mata-mata não gerada.</div>'; 
+            return; 
+        }
         div.innerHTML = t.knockout.map(k => {
             const A = t.teams.find(x=>x.id===k.tA);
             const B = t.teams.find(x=>x.id===k.tB);
-            return `<div class="card" style="min-width:150px; text-align:center"><small>${k.round}</small><br><b>${A.name}</b><br>vs<br><b>${B.name}</b></div>`
+            if(!A || !B) return '';
+            return `
+            <div class="bracket-match">
+                <span class="round-badge">${k.round}</span>
+                <div class="b-team">${A.name}</div>
+                <div class="b-vs">X</div>
+                <div class="b-team">${B.name}</div>
+            </div>`
         }).join('');
     },
 
@@ -364,22 +405,38 @@ const app = {
         const stats = logic.getPlayerStats(getCurrent());
         
         // Artilharia
-        const scorers = stats.filter(p => p.goals > 0).sort((a,b) => b.goals - a.goals);
-        document.getElementById('stats-scorers').innerHTML = scorers.map(p => `
-            <tr><td>${p.name}</td><td>${p.team}</td><td><strong>${p.goals}</strong></td></tr>
-        `).join('');
+        const scorers = stats.filter(p => p.goals > 0).sort((a,b) => b.goals - a.goals).slice(0, 10);
+        const scorersBody = document.getElementById('stats-scorers');
+        if(scorers.length === 0) {
+            scorersBody.innerHTML = `<tr><td colspan="3" class="empty-state" style="border:none; padding:15px">Nenhum gol registrado.</td></tr>`;
+        } else {
+            scorersBody.innerHTML = scorers.map((p, i) => `
+                <tr>
+                    <td>${i===0?'👑 ':''}${p.name}</td>
+                    <td><small class="badge">${p.team}</small></td>
+                    <td><strong>${p.goals}</strong></td>
+                </tr>
+            `).join('');
+        }
 
         // Cartões
         const cards = stats.filter(p => p.yellow > 0 || p.red > 0).sort((a,b) => b.red - a.red || b.yellow - a.yellow);
-        document.getElementById('stats-cards').innerHTML = cards.map(p => `
-            <li style="padding:5px; border-bottom:1px solid #eee; display:flex; justify-content:space-between;">
-                <span>${p.name} <small>(${p.team})</small></span>
-                <span>
-                    ${p.yellow ? `<span style="color:#f1c40f">■</span>${p.yellow}` : ''} 
-                    ${p.red ? `<span style="color:#c0392b">■</span>${p.red}` : ''}
-                </span>
-            </li>
-        `).join('');
+        const cardsBody = document.getElementById('stats-cards');
+        if(cards.length === 0) {
+            cardsBody.innerHTML = `<li class="empty-state" style="border:none">Nenhum cartão registrado.</li>`;
+        } else {
+            cardsBody.innerHTML = cards.map(p => `
+                <li>
+                    <div>
+                        <strong>${p.name}</strong> <small class="text-muted ml-10">${p.team}</small>
+                    </div>
+                    <div>
+                        ${p.yellow ? `<span class="text-warning" style="margin-right:8px"><i class="fas fa-square"></i> ${p.yellow}</span>` : ''} 
+                        ${p.red ? `<span class="text-danger"><i class="fas fa-square"></i> ${p.red}</span>` : ''}
+                    </div>
+                </li>
+            `).join('');
+        }
     },
 
     showTab: (id) => {
@@ -387,6 +444,7 @@ const app = {
         document.querySelectorAll('.nav-links li').forEach(e => e.classList.remove('active'));
         document.getElementById(`tab-${id}`).classList.remove('hidden');
         document.getElementById(`link-${id}`).classList.add('active');
+        window.scrollTo(0,0);
     },
 
     save: async () => {
@@ -394,7 +452,12 @@ const app = {
         await _supabase.from('usuarios').update({ data_tourneys: state.allTourneys }).eq('username', state.user);
     },
     shareLink: () => {
-        prompt("Link Público:", `${location.origin}${location.pathname}?u=${state.user}&id=${getCurrent().id}`);
+        const link = `${location.origin}${location.pathname}?u=${state.user}&id=${getCurrent().id}`;
+        navigator.clipboard.writeText(link).then(() => {
+            alert("Link público copiado para a área de transferência!\nQualquer pessoa com este link pode ver a tabela.");
+        }).catch(() => {
+            prompt("Copie o Link Público abaixo:", link);
+        });
     }
 };
 
@@ -407,27 +470,31 @@ const logic = {
         });
         t.matches.filter(m => m.ended).forEach(m => {
             const A = map[m.teamA], B = map[m.teamB];
+            if(!A || !B) return;
             A.J++; B.J++;
             A.GP+=m.scoreA; A.GC+=m.scoreB; A.SG = A.GP-A.GC;
             B.GP+=m.scoreB; B.GC+=m.scoreA; B.SG = B.GP-B.GC;
-            if(m.scoreA > m.scoreB) { A.V++; A.P += t.config.ptsWin; B.D++; }
-            else if(m.scoreB > m.scoreA) { B.V++; B.P += t.config.ptsWin; A.D++; }
-            else { A.E++; B.E++; A.P += t.config.ptsDraw; B.P += t.config.ptsDraw; }
+            
+            const ptsW = t.config.ptsWin || 3;
+            const ptsD = t.config.ptsDraw || 1;
+
+            if(m.scoreA > m.scoreB) { A.V++; A.P += ptsW; B.D++; }
+            else if(m.scoreB > m.scoreA) { B.V++; B.P += ptsW; A.D++; }
+            else { A.E++; B.E++; A.P += ptsD; B.P += ptsD; }
         });
-        return Object.values(map).sort((a,b) => b.P - a.P || b.SG - a.SG);
+        return Object.values(map).sort((a,b) => b.P - a.P || b.SG - a.SG || b.GP - a.GP);
     },
     
     getPlayerStats: (t) => {
-        let players = {}; // id -> {name, team, goals, yellow, red}
+        let players = {}; 
         
         t.matches.forEach(m => {
             if(!m.events) return;
             m.events.forEach(evt => {
-                if(!evt.playerId) return; // ignora eventos sem jogador
+                if(!evt.playerId) return; 
                 const pid = evt.playerId;
                 
                 if(!players[pid]) {
-                    // Busca nome do time
                     const tm = t.teams.find(x => x.id === evt.teamId);
                     players[pid] = { name: evt.playerName, team: tm ? tm.name : '-', goals:0, yellow:0, red:0 };
                 }
@@ -443,7 +510,13 @@ const logic = {
 
 // --- UI HELPERS ---
 const ui = {
-    openModal: (id) => document.getElementById(id).style.display = 'flex',
+    openModal: (id) => {
+        const modal = document.getElementById(id);
+        modal.style.display = 'flex';
+        // Foca no primeiro input automaticamente se houver
+        const firstInput = modal.querySelector('input');
+        if(firstInput) setTimeout(() => firstInput.focus(), 100);
+    },
     closeModal: (id) => document.getElementById(id).style.display = 'none',
     hideAll: () => {
         ['landing-page','tourney-selector','app-dashboard'].forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -458,44 +531,56 @@ const ui = {
         document.getElementById('app-dashboard').classList.remove('hidden');
     },
     renderTourneyList: () => {
-        document.getElementById('tourney-list').innerHTML = state.allTourneys.map((t,i) => `
-            <div class="card">
-                <h3>${t.config.name}</h3>
-                <button class="btn-primary full" onclick="app.loadTourney(${i})">Entrar</button>
+        const container = document.getElementById('tourney-list');
+        if(state.allTourneys.length === 0) {
+            container.innerHTML = `<div class="empty-state" style="grid-column: 1/-1">Você ainda não possui campeonatos. Crie um novo!</div>`;
+            return;
+        }
+        container.innerHTML = state.allTourneys.map((t,i) => `
+            <div class="card" style="text-align:center">
+                <i class="fas fa-trophy" style="font-size:40px; color:var(--primary); margin-bottom:15px; opacity:0.8"></i>
+                <h3 style="margin-bottom:20px">${t.config.name}</h3>
+                <button class="btn btn-primary full-width" onclick="app.loadTourney(${i})">Acessar Painel</button>
             </div>`).join('');
     },
     renderSquadList: (team) => {
-        document.getElementById('squad-list').innerHTML = team.players.map(p => `
-            <li>${p.name} <span style="color:red; cursor:pointer" onclick="app.removePlayer(${p.id})">&times;</span></li>
+        const list = document.getElementById('squad-list');
+        if(team.players.length === 0) {
+            list.innerHTML = `<li class="empty-state" style="border:none">Nenhum jogador cadastrado.</li>`;
+            return;
+        }
+        list.innerHTML = team.players.map(p => `
+            <li>
+                <span><i class="fas fa-user text-muted" style="margin-right:10px"></i> ${p.name}</span> 
+                <span class="text-danger" style="cursor:pointer; padding:5px" onclick="app.removePlayer(${p.id})" title="Remover"><i class="fas fa-times"></i></span>
+            </li>
         `).join('');
     },
     renderMatchStats: (m) => {
         document.getElementById('displayScoreA').innerText = m.scoreA;
         document.getElementById('displayScoreB').innerText = m.scoreB;
         
-        // Render Timeline
         const timeline = document.getElementById('match-timeline');
         if (!m.events || m.events.length === 0) {
-            timeline.innerHTML = '<small style="color:#999">Nenhum evento registrado.</small>';
+            timeline.innerHTML = '<div class="empty-state" style="border:none; padding:20px">A partida não possui eventos registrados.</div>';
             return;
         }
 
         timeline.innerHTML = m.events.map((evt, idx) => {
-            let icon = '';
-            let color = '';
-            if(evt.type === 'goal') { icon = 'fa-futbol'; color='#27ae60'; }
-            if(evt.type === 'yellow') { icon = 'fa-square'; color='#f1c40f'; }
-            if(evt.type === 'red') { icon = 'fa-square'; color='#c0392b'; }
+            let icon = ''; let colorClass = '';
+            if(evt.type === 'goal') { icon = 'fa-futbol'; colorClass='text-success'; }
+            if(evt.type === 'yellow') { icon = 'fa-square'; colorClass='text-warning'; }
+            if(evt.type === 'red') { icon = 'fa-square'; colorClass='text-danger'; }
 
             return `
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid #eee">
+            <div class="timeline-item">
                 <div>
-                    <i class="fas ${icon}" style="color:${color}; margin-right:5px;"></i>
+                    <i class="fas ${icon} ${colorClass}" style="margin-right:10px; font-size:16px;"></i>
                     <strong>${evt.playerName}</strong> 
                 </div>
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <small>${evt.time}</small>
-                    ${!state.isReadOnly ? `<i class="fas fa-trash" style="color:red; cursor:pointer" onclick="app.removeEvent(${idx})"></i>` : ''}
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <small class="badge">${evt.time}</small>
+                    ${!state.isReadOnly ? `<i class="fas fa-trash text-danger" style="cursor:pointer" onclick="app.removeEvent(${idx})"></i>` : ''}
                 </div>
             </div>`;
         }).join('');
@@ -507,3 +592,10 @@ const ui = {
 };
 
 function getCurrent() { return state.allTourneys[state.currentIdx]; }
+
+// Fechar modais ao clicar fora
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = "none";
+    }
+}
